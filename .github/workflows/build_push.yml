@@ -10,7 +10,6 @@ on:
       - '!.github/**'
       - '.github/scripts/**'
       - '.github/workflows/build_push.yml'
-  # Manual trigger
   workflow_dispatch:
 
 permissions: {}
@@ -49,43 +48,16 @@ jobs:
           Built on commit: $(git log -1 --pretty=%H)
           {delimiter}" >> $GITHUB_OUTPUT
 
-      - name: Find lib changes
-        id: modified-libs
-        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+      - name: Get last successful CI commit
+        uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
         with:
-          files: lib/
-          files_ignore: lib/**.md
-          files_separator: " "
-          safe_output: false
-
-      - name: Push last-built commit to repo branch
-        if: steps.modified-libs.outputs.any_changed == 'true'
-        run: |
-          git fetch origin repo:repo
-          LAST_REPO_COMMIT_MESSAGE=$(git log -1 --pretty=%B repo)
-          if [[ "$LAST_REPO_COMMIT_MESSAGE" == *"skip-ci"* ]]; then
-            LAST_REPO_COMMIT=$(git rev-parse repo)
-          else
-            LAST_REPO_COMMIT=$(git log --format=%H --grep="Built on commit" -1 repo | head -1)
-          fi
-          LAST_MAIN_COMMIT=$(git rev-parse HEAD)
-          if [ "$LAST_REPO_COMMIT" != "$LAST_MAIN_COMMIT" ]; then
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git config --global user.name "github-actions[bot]"
-            git push -f origin HEAD:repo
-          fi
+          main-branch-name: ${{ github.ref_name }}
+          fallback-sha: 4b825dc642cb6eb9a060e54bf8d69288fbee4904 # empty tree
 
       - id: generate-matrices
         name: Create output matrices
         run: |
           python ./.github/scripts/generate-build-matrices.py "$NX_BASE" Release
-
-      - name: Delete unused files
-        if: steps.generate-matrices.outputs.delete != ''
-        run: |
-          git rm ${{ steps.generate-matrices.outputs.delete }}
-          git commit -m "Remove dead extensions [skip ci]"
-          git push
 
   build:
     name: Build extensions (${{ matrix.chunk.number }})
@@ -99,78 +71,81 @@ jobs:
       - name: Checkout ${{ github.ref_name }} branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          persist-credentials: false
 
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@8f49b35e9d82000dcae1918b2133ba48d65a5c47 # v4.3.0
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@3a4f6e1af504cf6a31841fa899ec6aa86d7ba6ea # v4.7.0
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           java-version: 17
           distribution: temurin
 
-      - name: Prepare signing key
-        env:
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: |
-          if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | base64 -d > signingkey.jks
-            echo "Keystore prepared"
-          else
-            echo "SIGNING_KEY secret not set, skipping keystore preparation"
-          fi
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: ${{ matrix.chunk.number > 1 }}
 
-      - name: Build extensions
+      - name: Prepare signing key
+        run: |
+          echo ${{ secrets.SIGNING_KEY }} | base64 -d > signingkey.jks
+          chmod 600 signingkey.jks
+
+      - name: Build extensions (${{ matrix.chunk.number }})
         env:
+          MODULES: ${{ join(matrix.chunk.modules, ' ') }}
           ALIAS: ${{ secrets.ALIAS }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          # API key secrets for sources
-          ANILIST_API_KEY: ${{ secrets.ANILIST_API_KEY }}
-          MEGA_API_KEY: ${{ secrets.MEGA_API_KEY }}
-          MEGACLOUD_API: ${{ secrets.MEGACLOUD_API }}
-          SHIRO_MAL_ID: ${{ secrets.SHIRO_MAL_ID }}
-          SYNC_MAL_ID: ${{ secrets.SYNC_MAL_ID }}
-          ALLANIME_API_URL: ${{ secrets.ALLANIME_API_URL }}
         run: |
-          echo "Building chunk ${{ matrix.chunk.number }}: ${{ join(matrix.chunk.projects, ' ') }}"
-          echo "IS_PR_CHECK=$IS_PR_CHECK"
-          chmod +x ./gradlew
-          ./gradlew ${{ join(matrix.chunk.projects, ' ') }} --stacktrace
+          ./gradlew $MODULES
 
-      - name: Upload APKs
+      - name: Upload APKs (${{ matrix.chunk.number }})
         if: github.repository == 'Sindrow33/ru-anime-extensions'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: repo-apks
-          path: '**/release/*.apk'
+          name: "individual-apks-${{ matrix.chunk.number }}"
+          path: "**/*.apk"
           retention-days: 1
 
-      - name: Delete keystore
-        run: rm -f signingkey.jks
+      - name: Clean up CI files
+        run: rm signingkey.jks
 
   publish:
     name: Publish extension repo
     needs: [prepare, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
     if: always() && github.repository == 'Sindrow33/ru-anime-extensions' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      - name: Download APKs
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+      - name: Download APK artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: repo-apks
-          path: repo/apk
+          path: ~/apk-artifacts
+
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          java-version: 17
+          distribution: temurin
 
       - name: Checkout ${{ github.ref_name }} branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: ${{ github.ref_name }}
           ref: ${{ github.ref_name }}
+          path: ${{ github.ref_name }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create repo artifacts
+        run: |
+          cd ${{ github.ref_name }}
+          python ./.github/scripts/move-built-apks.py
+          INSPECTOR_LINK="$(curl -s "https://api.github.com/repos/komikku-app/aniyomi-extensions-inspector/releases/latest" | jq -r '.assets[0].browser_download_url')"
+          curl -L "$INSPECTOR_LINK" -o ./Inspector.jar
+          java -jar ./Inspector.jar "repo/apk" "output.json" "tmp"
+          python ./.github/scripts/create-repo.py
 
       - name: Checkout repo branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -181,48 +156,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@3a4f6e1af504cf6a31841fa899ec6aa86d7ba6ea # v4.7.0
-        with:
-          java-version: 17
-          distribution: temurin
-
-      - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
-        with:
-          python-version: '3.x'
-
-      - name: Install inspector
-        run: |
-          wget -q "https://github.com/aniyomiorg/inspector/releases/download/r0.2.0/inspector.jar"
-          java -jar inspector.jar --help
-
-      - name: Move APKs
-        run: |
-          python ${{ github.ref_name }}/.github/scripts/move-built-apks.py
-
-      - name: Inspect APKs
+      - name: Merge repo
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          java -jar inspector.jar "repo/apk" "repo/apk" "eu.kanade.tachiyomi.extension"
-          echo "signing SHA256:" $(keytool -printcert -file "META-INF/CERT.RSA" | grep -oP "(?<=SHA256:).*")
-
-      - name: Create repo JSON
+          DELETE: ${{ needs.prepare.outputs.delete }}
         run: |
           cd repo
-          python ../${{ github.ref_name }}/.github/scripts/create-repo.py
+          python ../${{ github.ref_name }}/.github/scripts/merge-repo.py "$DELETE" '${{ github.ref_name }}/repo'
 
-      - name: Commit changes
-        run: |
-          cd repo
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git status
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "${{ needs.prepare.outputs.latestCommitMessage }}"
-            git push
-          else
-            echo "No changes to commit"
-          fi
+      - name: Deploy repo
+        uses: EndBug/add-and-commit@290ea2c423ad77ca9c62ae0f5b224379612c0321 # v10.0.0
+        with:
+          message: "${{ needs.prepare.outputs.latestCommitMessage }}"
+          cwd: "./repo"
