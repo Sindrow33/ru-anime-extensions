@@ -5,6 +5,6 @@ import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 
 class AnimeGO : AnimeSourceFactory {
     override fun createSources(): List<AnimeSource> = listOf<AnimeSource>(
-        AnimeGOSource("AnimeGO", "https://animego.one"),
+        AnimeGOSource("AnimeGO", "https://animego.org"),
     )
 }
