@@ -1,5 +1,30 @@
 [
   {
+    "name": "Aniyomi: AniDUB",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.anidub",
+    "apk": "aniyomi-ru.anidub-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "AniDUB",
+        "lang": "ru",
+        "id": "594495106808378125",
+        "baseUrl": "https://anidub.live",
+        "versionId": 1
+      },
+      {
+        "name": "AniDUB Mirror",
+        "lang": "ru",
+        "id": "3755506601872394121",
+        "baseUrl": "https://anidub.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Animelib",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animelib",
     "apk": "aniyomi-ru.animelib-v14.15.apk",
