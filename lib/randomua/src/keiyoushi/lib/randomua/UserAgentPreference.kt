@@ -5,8 +5,6 @@ import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.source.online.HttpSource
-import keiyoushi.utils.getPreferences
 import okhttp3.Headers
 
 /**
@@ -31,13 +29,13 @@ private fun SharedPreferences.getPrefCustomUA(): String? = getString(PREF_KEY_CU
  * @param filterInclude Filter to only include Random User Agents containing these strings
  * @param filterExclude Filter to exclude Random User Agents containing these strings
  */
-context(source: HttpSource)
 fun Headers.Builder.setRandomUserAgent(
+    source: Any,
     userAgentType: UserAgentType? = null,
     filterInclude: List<String> = emptyList(),
     filterExclude: List<String> = emptyList(),
 ) = apply {
-    val preferences = source.getPreferences()
+    val preferences = getPreferencesFromSource(source)
     val randomUserAgentType = userAgentType ?: preferences.getPrefUAType()
     val customUserAgent = preferences.getPrefCustomUA()
 
@@ -56,10 +54,9 @@ fun Headers.Builder.setRandomUserAgent(
 /**
  * Helper function to add Random User-Agent settings to SharedPreference
  */
-context(source: HttpSource)
-fun PreferenceScreen.addRandomUAPreference() {
-    val preferences = source.getPreferences()
-    val customUaPref = EditTextPreference(context).apply {
+fun PreferenceScreen.addRandomUAPreference(source: Any) {
+    val preferences = getPreferencesFromSource(source)
+    val customUaPref = EditTextPreference(this.context).apply {
         key = PREF_KEY_CUSTOM_UA
         title = "Custom user agent string"
         summary = "Leave blank to use the default user agent string"
@@ -67,15 +64,15 @@ fun PreferenceScreen.addRandomUAPreference() {
         setOnPreferenceChangeListener { _, newValue ->
             try {
                 Headers.headersOf("User-Agent", newValue as String)
-                Toast.makeText(context, "Restart the app to apply changes", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@addRandomUAPreference.context, "Restart the app to apply changes", Toast.LENGTH_SHORT).show()
                 true
             } catch (e: IllegalArgumentException) {
-                Toast.makeText(context, "Invalid user agent string: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@addRandomUAPreference.context, "Invalid user agent string: ${e.message}", Toast.LENGTH_LONG).show()
                 false
             }
         }
     }
-    ListPreference(context).apply {
+    ListPreference(this.context).apply {
         key = PREF_KEY_RANDOM_UA
         title = "Random user agent string"
         entries = RANDOM_UA_ENTRIES
@@ -84,11 +81,16 @@ fun PreferenceScreen.addRandomUAPreference() {
         setDefaultValue("off")
         setOnPreferenceChangeListener { _, newValue ->
             customUaPref.setEnabled(newValue == "off")
-            Toast.makeText(context, "Restart the app to apply changes", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@addRandomUAPreference.context, "Restart the app to apply changes", Toast.LENGTH_SHORT).show()
             true
         }
     }.also(::addPreference)
     customUaPref.also(::addPreference)
+}
+
+private fun getPreferencesFromSource(source: Any): SharedPreferences = when (source) {
+    is SharedPreferences -> source
+    else -> throw IllegalArgumentException("RandomUA requires a SharedPreferences-compatible source")
 }
 
 private const val PREF_KEY_RANDOM_UA = "pref_key_random_ua_"
