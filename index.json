@@ -25,6 +25,24 @@
     ]
   },
   {
+    "name": "Aniyomi: AnimeGO",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.animego",
+    "apk": "aniyomi-ru.animego-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "AnimeGO",
+        "lang": "ru",
+        "id": "4066087985047695709",
+        "baseUrl": "https://animego.org",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Animelib",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animelib",
     "apk": "aniyomi-ru.animelib-v14.15.apk",
