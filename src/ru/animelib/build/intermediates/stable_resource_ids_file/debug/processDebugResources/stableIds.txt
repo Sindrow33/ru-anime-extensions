@@ -1,0 +1,1 @@
+eu.kanade.tachiyomi.animeextension.ru.animelib:mipmap/ic_launcher = 0x7f010000

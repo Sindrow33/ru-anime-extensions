@@ -1,0 +1,8 @@
+eu.kanade.tachiyomi.animeextension.yummyanime-pngs-0 /workspaces/ru-anime-extensions/src/ru/yummyanime/build/generated/res/pngs/debug
+eu.kanade.tachiyomi.animeextension.yummyanime-updated_navigation_xml-1 /workspaces/ru-anime-extensions/src/ru/yummyanime/build/generated/updated_navigation_xml/debug
+eu.kanade.tachiyomi.animeextension.yummyanime-packageDebugResources-2 /workspaces/ru-anime-extensions/src/ru/yummyanime/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+eu.kanade.tachiyomi.animeextension.yummyanime-packageDebugResources-3 /workspaces/ru-anime-extensions/src/ru/yummyanime/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+eu.kanade.tachiyomi.animeextension.yummyanime-debug-4 /workspaces/ru-anime-extensions/src/ru/yummyanime/build/intermediates/merged_res/debug/mergeDebugResources
+eu.kanade.tachiyomi.animeextension.yummyanime-yummyanime-5 /workspaces/ru-anime-extensions/src/ru/yummyanime/res
+eu.kanade.tachiyomi.animeextension.yummyanime-debug-6 /workspaces/ru-anime-extensions/src/ru/yummyanime/src/debug/res
+gradleHome-0 /home/codespace/.gradle

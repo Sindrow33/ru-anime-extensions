@@ -1,0 +1,22 @@
+/**
+ * Automatically generated file. DO NOT MODIFY
+ */
+package eu.kanade.tachiyomi.animeextension;
+
+public final class BuildConfig {
+  public static final boolean DEBUG = Boolean.parseBoolean("true");
+  public static final String APPLICATION_ID = "eu.kanade.tachiyomi.animeextension.ru.animelib";
+  public static final String BUILD_TYPE = "debug";
+  public static final int VERSION_CODE = 15;
+  public static final String VERSION_NAME = "14.15";
+  // Field from build type: debug
+  public static final String KAISVA = "https://c-kai-8090.amarullz.com";
+  // Field from build type: debug
+  public static final String KISSKH_API = "https://script.google.com/macros/s/AKfycbzn8B31PuDxzaMa9_CQ0VGEDasFqfzI5bXvjaIZH4DM8DNq9q6xj1ALvZNz_JT3jF0suA/exec?id=";
+  // Field from build type: debug
+  public static final String KISSKH_SUB_API = "https://script.google.com/macros/s/AKfycbyq6hTj0ZhlinYC6xbggtgo166tp6XaDKBCGtnYk8uOfYBUFwwxBui0sGXiu_zIFmA/exec?id=";
+  // Field from build type: debug
+  public static final String MEGACLOUD_API = "https://script.google.com/macros/s/AKfycbxHbYHbrGMXYD2-bC-C43D3njIbU-wGiYQuJL61H4vyy6YVXkybMNNEPJNPPuZrD1gRVA/exec";
+  // Field from build type: debug
+  public static final String TMDB_API = "null";
+}

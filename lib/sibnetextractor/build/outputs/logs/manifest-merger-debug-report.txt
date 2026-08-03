@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml:2:13-83
+INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml:2:13-83
+	package
+		INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml
+	xmlns:android
+		ADDED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml:2:23-81
+uses-sdk
+INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml reason: use-sdk injection requested
+INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml
+INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml
+	android:targetSdkVersion
+		INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml
+	android:minSdkVersion
+		INJECTED from /workspaces/ru-anime-extensions/lib/sibnetextractor/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest9243975599344514811.xml

@@ -1,0 +1,8 @@
+eu.kanade.tachiyomi.animeextension.animelib-pngs-0 /workspaces/ru-anime-extensions/src/ru/animelib/build/generated/res/pngs/debug
+eu.kanade.tachiyomi.animeextension.animelib-updated_navigation_xml-1 /workspaces/ru-anime-extensions/src/ru/animelib/build/generated/updated_navigation_xml/debug
+eu.kanade.tachiyomi.animeextension.animelib-packageDebugResources-2 /workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+eu.kanade.tachiyomi.animeextension.animelib-packageDebugResources-3 /workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+eu.kanade.tachiyomi.animeextension.animelib-debug-4 /workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/merged_res/debug/mergeDebugResources
+eu.kanade.tachiyomi.animeextension.animelib-animelib-5 /workspaces/ru-anime-extensions/src/ru/animelib/res
+eu.kanade.tachiyomi.animeextension.animelib-debug-6 /workspaces/ru-anime-extensions/src/ru/animelib/src/debug/res
+gradleHome-0 /home/codespace/.gradle

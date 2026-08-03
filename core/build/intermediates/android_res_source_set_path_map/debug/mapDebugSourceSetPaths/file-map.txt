@@ -1,0 +1,9 @@
+keiyoushi.core-pngs-0 /workspaces/ru-anime-extensions/core/build/generated/res/pngs/debug
+keiyoushi.core-updated_navigation_xml-1 /workspaces/ru-anime-extensions/core/build/generated/updated_navigation_xml/debug
+keiyoushi.core-mergeDebugResources-2 /workspaces/ru-anime-extensions/core/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+keiyoushi.core-mergeDebugResources-3 /workspaces/ru-anime-extensions/core/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+keiyoushi.core-debug-4 /workspaces/ru-anime-extensions/core/build/intermediates/merged_res/debug/mergeDebugResources
+keiyoushi.core-debug-5 /workspaces/ru-anime-extensions/core/build/intermediates/packaged_res/debug/packageDebugResources
+keiyoushi.core-debug-6 /workspaces/ru-anime-extensions/core/src/debug/res
+keiyoushi.core-main-7 /workspaces/ru-anime-extensions/core/src/main/res
+gradleHome-0 /home/codespace/.gradle

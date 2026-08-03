@@ -1,0 +1,43 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="eu.kanade.tachiyomi.animeextension.ru.animelib"
+4    android:versionCode="15"
+5    android:versionName="14.15" >
+6
+7    <uses-sdk
+7-->INJECTED
+8        android:minSdkVersion="21"
+8-->INJECTED
+9        android:targetSdkVersion="34" />
+9-->INJECTED
+10
+11    <uses-feature android:name="tachiyomi.animeextension" />
+11-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:7:5-61
+11-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:7:19-58
+12
+13    <application
+13-->INJECTED
+14        android:allowBackup="false"
+14-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:10:9-36
+15        android:debuggable="true"
+16        android:extractNativeLibs="true"
+16-->INJECTED
+17        android:icon="@mipmap/ic_launcher"
+17-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:11:9-43
+18        android:label="Aniyomi: Animelib" >
+18-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:12:9-35
+19        <meta-data
+19-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:13:9-15:43
+20            android:name="tachiyomi.animeextension.class"
+20-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:14:13-58
+21            android:value=".Animelib" />
+21-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:15:13-40
+22        <meta-data
+22-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:16:9-18:39
+23            android:name="tachiyomi.animeextension.nsfw"
+23-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:17:13-57
+24            android:value="1" />
+24-->[:core] /workspaces/ru-anime-extensions/core/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml:18:13-36
+25    </application>
+26
+27</manifest>

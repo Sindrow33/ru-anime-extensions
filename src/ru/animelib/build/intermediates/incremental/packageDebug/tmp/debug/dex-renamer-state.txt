@@ -1,0 +1,16 @@
+#Mon Aug 03 07:36:25 UTC 2026
+base.0=/workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/dex/debug/mergeLibDexDebug/0/classes.dex
+base.1=/workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/dex/debug/mergeProjectDexDebug/0/classes.dex
+base.2=/workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/dex/debug/mergeProjectDexDebug/1/classes.dex
+base.3=/workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/dex/debug/mergeProjectDexDebug/12/classes.dex
+base.4=/workspaces/ru-anime-extensions/src/ru/animelib/build/intermediates/global_synthetics_dex/debug/generateDebugGlobalSynthetics/classes.dex
+path.0=0/classes.dex
+path.1=0/classes.dex
+path.2=1/classes.dex
+path.3=12/classes.dex
+path.4=classes.dex
+renamed.0=classes.dex
+renamed.1=classes2.dex
+renamed.2=classes3.dex
+renamed.3=classes4.dex
+renamed.4=classes5.dex

@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml:2:13-83
+INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml:2:13-83
+	package
+		INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml
+	xmlns:android
+		ADDED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml:2:23-81
+uses-sdk
+INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml reason: use-sdk injection requested
+INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml
+INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml
+	android:targetSdkVersion
+		INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml
+	android:minSdkVersion
+		INJECTED from /workspaces/ru-anime-extensions/lib/playlistutils/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13477794431447684383.xml

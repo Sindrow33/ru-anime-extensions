@@ -1,0 +1,8 @@
+eu.kanade.tachiyomi.animeextension.animevost-pngs-0 /workspaces/ru-anime-extensions/src/ru/animevost/build/generated/res/pngs/debug
+eu.kanade.tachiyomi.animeextension.animevost-updated_navigation_xml-1 /workspaces/ru-anime-extensions/src/ru/animevost/build/generated/updated_navigation_xml/debug
+eu.kanade.tachiyomi.animeextension.animevost-packageDebugResources-2 /workspaces/ru-anime-extensions/src/ru/animevost/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+eu.kanade.tachiyomi.animeextension.animevost-packageDebugResources-3 /workspaces/ru-anime-extensions/src/ru/animevost/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+eu.kanade.tachiyomi.animeextension.animevost-debug-4 /workspaces/ru-anime-extensions/src/ru/animevost/build/intermediates/merged_res/debug/mergeDebugResources
+eu.kanade.tachiyomi.animeextension.animevost-animevost-5 /workspaces/ru-anime-extensions/src/ru/animevost/res
+eu.kanade.tachiyomi.animeextension.animevost-debug-6 /workspaces/ru-anime-extensions/src/ru/animevost/src/debug/res
+gradleHome-0 /home/codespace/.gradle
