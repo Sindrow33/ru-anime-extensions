@@ -37,13 +37,12 @@ class YummyAnime :
     private val apiUrl = "https://api.yani.tv"
     private val appToken = "o0nap18m_7a0od86"
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
+    private val allohaExtractor by lazy { AllohaExtractor(client) }
     private val preferences by getPreferencesLazy()
 
     override fun headersBuilder(): Headers.Builder = Headers.Builder()
         .add("Accept", "application/json")
         .add("X-Application", appToken)
-
-    // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
@@ -56,8 +55,6 @@ class YummyAnime :
         }.also(screen::addPreference)
     }
 
-    // ============================== Popular ===============================
-
     override fun popularAnimeRequest(page: Int): Request {
         val offset = (page - 1) * 20
         return GET("$apiUrl/anime/catalog?limit=20&offset=$offset", headers)
@@ -69,8 +66,6 @@ class YummyAnime :
         return AnimesPage(animes, animes.size == 20)
     }
 
-    // =============================== Latest ===============================
-
     override fun latestUpdatesRequest(page: Int): Request = GET("$apiUrl/anime/schedule", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage {
@@ -79,8 +74,6 @@ class YummyAnime :
         return AnimesPage(animes, false)
     }
 
-    // =============================== Search ===============================
-
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET("$apiUrl/search?q=$query", headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage {
@@ -88,8 +81,6 @@ class YummyAnime :
         val animes = data?.map { it.toSAnime() } ?: emptyList()
         return AnimesPage(animes, false)
     }
-
-    // =========================== Anime Details ============================
 
     override fun animeDetailsRequest(anime: SAnime): Request = GET("$apiUrl/anime/${anime.url.substringAfterLast('/')}", headers)
 
@@ -112,8 +103,6 @@ class YummyAnime :
         }
     }
 
-    // ============================== Episodes ==============================
-
     override fun episodeListRequest(anime: SAnime): Request = GET("$apiUrl/anime/${anime.url.substringAfterLast('/')}?need_videos=true", headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
@@ -121,7 +110,6 @@ class YummyAnime :
         val data = response.parseAs<YummyResponse<YummyDetailsDto>>().response ?: return emptyList()
 
         val videos = data.videos ?: return emptyList()
-
         val isMovie = data.type?.alias?.contains("movie") == true
 
         val episodes = videos
@@ -141,8 +129,6 @@ class YummyAnime :
 
         return episodes
     }
-
-    // ============================ Video Links =============================
 
     override fun videoListRequest(episode: SEpisode): Request {
         val parts = episode.url.split("|", limit = 2)
@@ -182,11 +168,8 @@ class YummyAnime :
 
     private suspend fun videoListParseAsync(response: Response): List<Video> {
         val episodeNum = response.request.url.queryParameter("episode") ?: return emptyList()
-
         val data = response.parseAs<YummyResponse<YummyDetailsDto>>().response ?: return emptyList()
-
         val allVideos = data.videos ?: return emptyList()
-
         val episodeVideos = allVideos.filter { it.number?.content == episodeNum }
 
         return episodeVideos.parallelCatchingFlatMap { video ->
@@ -196,12 +179,12 @@ class YummyAnime :
 
             when {
                 player.contains("Kodik", ignoreCase = true) -> kodikVideoLinks(iframeUrl, dubbing)
+                player.contains("Alloha", ignoreCase = true) || iframeUrl.contains("alloha") ->
+                    allohaExtractor.videosFromUrl(iframeUrl, baseUrl, "$dubbing (Alloha) ")
                 else -> fallbackVideoLinks(iframeUrl, dubbing)
             }
         }
     }
-
-    // ============================ Kodik Player ===============================
 
     private fun kodikVideoLinks(iframeUrl: String, dubbing: String): List<Video> {
         val kodikHeaders = Headers.Builder()
@@ -214,7 +197,6 @@ class YummyAnime :
         }.getOrNull() ?: return emptyList()
 
         val pageHtml = page.html()
-
         val rawParams = URL_PARAMS_REGEX.find(pageHtml)?.groupValues?.get(1)
             ?: URL_PARAMS_REGEX_ALT.find(pageHtml)?.groupValues?.get(1)
             ?: return emptyList()
@@ -352,8 +334,6 @@ class YummyAnime :
         listOf(Video(hlsUrl, "$dubbing (${qualityName}p Kodik)", hlsUrl, headers = hlsHeaders))
     }
 
-    // =========================== Fallback Player =============================
-
     private fun fallbackVideoLinks(iframeUrl: String, dubbing: String): List<Video> {
         val body = runCatching {
             client.newCall(GET(iframeUrl, headers)).execute().body.string()
@@ -402,10 +382,7 @@ class YummyAnime :
         return listOf(Video(stream, "$dubbing (Unknown)", stream, headers = videoHeaders))
     }
 
-    // ============================= Utilities ==============================
-
     private fun String.fixProtocol(): String = if (startsWith("//")) "https:$this" else this
-
     private fun String.toOrigin(): String = ORIGIN_REGEX.find(this)?.groupValues?.get(1) ?: this
 
     companion object {
@@ -415,7 +392,7 @@ class YummyAnime :
         private val QUALITY_REGEX = Regex("""(\d{3,4})\s*p""")
         private val ATOB_REGEX = Regex("atob\\([^\"]")
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'([^']+)'""")
-        private val URL_PARAMS_REGEX_ALT = Regex("""urlParams\s*=\s*"([^"]+)"""")
+        private val URL_PARAMS_REGEX_ALT = Regex("""urlParams\s*=\s*"([^"]+")""")
         private val TYPE_REGEX = Regex("""\.type\s*=\s*['"]([^'"]+)['"]""")
         private val HASH_REGEX = Regex("""\.hash\s*=\s*['"]([^'"]+)['"]""")
         private val ID_REGEX = Regex("""\.id\s*=\s*['"]?([A-Za-z0-9]+)['"]?""")
