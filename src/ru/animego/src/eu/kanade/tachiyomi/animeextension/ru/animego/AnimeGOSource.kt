@@ -7,12 +7,10 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import uy.kohesive.injekt.injectLazy
 
 class AnimeGOSource(
     override val name: String,
@@ -21,7 +19,6 @@ class AnimeGOSource(
 
     override val lang = "ru"
     override val supportsLatest = true
-    override val client: OkHttpClient by injectLazy()
 
     // ============================== Popular ==============================
     override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime?page=$page", headers)
