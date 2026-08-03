@@ -66,8 +66,7 @@ class AnimeGOSource(
 
     // ============================== Popular ==============================
 
-    override fun popularAnimeRequest(page: Int): Request =
-        GET("$baseUrl/anime?page=$page", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime?page=$page", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.useAsJsoup()
@@ -229,8 +228,7 @@ class AnimeGOSource(
 
     // ============================== Videos ==============================
 
-    override fun videoListRequest(episode: SEpisode): Request =
-        GET(baseUrl + episode.url, xhrHeaders)
+    override fun videoListRequest(episode: SEpisode): Request = GET(baseUrl + episode.url, xhrHeaders)
 
     override fun videoListParse(response: Response): List<Video> {
         val content = parsePlayerContent(response)
@@ -402,8 +400,7 @@ class AnimeGOSource(
         }
     }
 
-    private fun formatEpisodeNumber(number: Float): String =
-        if (number % 1f == 0f) number.toInt().toString() else number.toString()
+    private fun formatEpisodeNumber(number: Float): String = if (number % 1f == 0f) number.toInt().toString() else number.toString()
 
     companion object {
         private const val CVH_API = "https://plapi.cdnvideohub.com/api/v1/player/sv"
