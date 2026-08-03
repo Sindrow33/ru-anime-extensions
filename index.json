@@ -25,6 +25,24 @@
     ]
   },
   {
+    "name": "Aniyomi: AniLiberty",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.aniliberty",
+    "apk": "aniyomi-ru.aniliberty-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "AniLiberty",
+        "lang": "ru",
+        "id": "1447761418661413867",
+        "baseUrl": "https://anilibria.top",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: AnimeGO",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animego",
     "apk": "aniyomi-ru.animego-v14.1.apk",
