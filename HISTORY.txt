@@ -1,0 +1,13 @@
+- AnimeGO v11 (03.08.2026): добавлены экстракторы видео для прямых ссылок m3u8/mpd.
+  Файлы: KodikExtractor.kt, AniboomExtractor.kt (пакет ru.animego), AnimeGOSource.kt обновлён.
+  Kodik: GET страницы плеера → var domain/d_sign/pd/pd_sign/ref/ref_sign + vInfo.type/hash/id,
+  из assets/js плеера base64-путь API ($.ajax...atob), POST формой на /ftor (кэшируем путь,
+  при ошибке перечитываем), JSON links[360/480/720], декод ROT18+Base64, для 720
+  замена /480.mp4: → /720.mp4:. С 03.2025 возможны прямые m3u8 без кодирования.
+  Aniboom: GET embed с Referer: {baseUrl}/ → #video[data-parameters] → JSON hls.src/dash.src,
+  видео-заголовки Title Case: Referer/Origin https://{host}, Accept-Language ru-RU (иначе 403).
+  Sibnet: lib:sibnetextractor из yuzono (aniyomi.lib.sibnetextractor.SibnetExtractor).
+  videoListParse: flatMap по button[data-player], выбор экстрактора по host
+  (kodik/anivod/aniqit, aniboom, sibnet), fallback — Video со страницей плеера.
+  build.gradle: добавлена зависимость lib:sibnetextractor. Сборка :src:ru:animego:assembleDebug OK.
+  TODO: проверить тайтлы с 1 серией (другая разметка /player/{animeId}), команда curl в чате.
