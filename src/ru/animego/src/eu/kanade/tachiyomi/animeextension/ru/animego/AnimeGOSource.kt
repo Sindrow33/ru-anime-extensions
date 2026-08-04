@@ -130,55 +130,63 @@ class AnimeGOSource(
 
         val document = Jsoup.parse(content, baseUrl)
 
-        val episodes = document
-            .select(".player-video-bar__item[data-episode], [data-episode][data-episode-number]")
-            .mapNotNull { element ->
-                val episodeId = element.attr("data-episode")
-                if (episodeId.isBlank()) return@mapNotNull null
+        // Собираем серии по любому элементу с data-episode или data-episode-number
+        val episodeElements = document.select("[data-episode], [data-episode-number]")
+            .filter { it.tagName() == "div" || it.tagName() == "button" || it.tagName() == "a" }
 
-                val rawNumber = element.attr("data-episode-number")
-                val number = Regex("""\d+(?:[.,]\d+)?""")
-                    .find(rawNumber)
-                    ?.value
-                    ?.replace(',', '.')
-                    ?.toFloatOrNull()
-                    ?: return@mapNotNull null
+        val episodes = episodeElements.mapNotNull { element ->
+            // ID серии: сначала data-episode, потом data-episode-id, потом data-id
+            val episodeId = element.attr("data-episode")
+                .ifBlank { element.attr("data-episode-id") }
+                .ifBlank { element.attr("data-id") }
+            if (episodeId.isBlank()) return@mapNotNull null
 
-                val title = element.attr("data-episode-title").trim()
+            val rawNumber = element.attr("data-episode-number")
+                .ifBlank { element.attr("data-number") }
+            val number = Regex("""\d+(?:[.,]\d+)?""")
+                .find(rawNumber)
+                ?.value
+                ?.replace(',', '.')
+                ?.toFloatOrNull()
+                ?: return@mapNotNull null
 
-                SEpisode.create().apply {
-                    name = if (title.isNotBlank()) {
-                        "${number.cleanNumber()}. $title"
-                    } else {
-                        "Серия ${number.cleanNumber()}"
-                    }
-                    episode_number = number
+            val title = element.attr("data-episode-title")
+                .ifBlank { element.attr("data-title") }
+                .trim()
 
-                    // Здесь хранится именно ID серии, а не ID аниме.
-                    url = episodeId
+            SEpisode.create().apply {
+                name = if (title.isNotBlank()) {
+                    "${number.cleanNumber()}. $title"
+                } else {
+                    "Серия ${number.cleanNumber()}"
                 }
+                episode_number = number
+                // Здесь хранится именно ID серии, а не ID аниме.
+                url = episodeId
             }
+        }
             .distinctBy { it.url }
             .sortedByDescending { it.episode_number }
 
-        // Для полнометражных фильмов AnimeGO может сразу вернуть кнопки
-        // плееров без списка серий.
-        if (episodes.isEmpty() && document.select("button[data-player]").isNotEmpty()) {
-            val animeId = response.request.url.pathSegments.last()
-
-            return listOf(
-                SEpisode.create().apply {
-                    name = "Фильм"
-                    episode_number = 1f
-                    url = "film:$animeId"
-                },
-            )
+        // Fallback: если серий нет, но есть кнопки плееров — это фильм/спецвыпуск
+        if (episodes.isEmpty()) {
+            val hasPlayers = document.select("button[data-player]").isNotEmpty()
+            if (hasPlayers) {
+                val animeId = response.request.url.pathSegments.last()
+                return listOf(
+                    SEpisode.create().apply {
+                        name = "Фильм"
+                        episode_number = 1f
+                        url = "film:$animeId"
+                    },
+                )
+            }
         }
 
         return episodes
     }
 
-    override fun episodeListSelector(): String = ".player-video-bar__item[data-episode]"
+    override fun episodeListSelector(): String = "[data-episode], [data-episode-number]"
 
     override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException("Используется episodeListParse")
 
@@ -209,9 +217,9 @@ class AnimeGOSource(
         val document = Jsoup.parse(content, baseUrl)
 
         return document.select("button[data-player]")
-            .flatMap { button ->
+            .mapNotNull { button ->
                 val rawUrl = button.attr("data-player").trim()
-                if (rawUrl.isBlank()) return@flatMap emptyList()
+                if (rawUrl.isBlank()) return@mapNotNull null
 
                 val playerUrl = when {
                     rawUrl.startsWith("//") -> "https:$rawUrl"
@@ -239,8 +247,7 @@ class AnimeGOSource(
                 }.getOrDefault("")
 
                 // Пробуем достать прямые ссылки на видео через экстракторы.
-                // При любой ошибке возвращаем страницу плеера как fallback.
-                runCatching {
+                val extracted = runCatching {
                     when {
                         host.contains("kodik") || host.contains("anivod") || host.contains("aniqit") ->
                             kodikExtractor.videosFromUrl(playerUrl, "$translation: ")
@@ -251,10 +258,18 @@ class AnimeGOSource(
                         else -> emptyList()
                     }
                 }.getOrElse { emptyList() }
-                    .ifEmpty {
-                        listOf(Video(playerUrl, "$translation ($provider)", playerUrl, playerHeaders))
-                    }
+
+                // Если экстрактор сработал — отдаём его видео.
+                // Если нет — для известных плееров не даём fallback на страницу,
+                // чтобы плеер не пытался воспроизвести HTML (Unrecognized file format).
+                when {
+                    extracted.isNotEmpty() -> extracted
+                    host.contains("kodik") || host.contains("anivod") || host.contains("aniqit") ||
+                        host.contains("aniboom") || host.contains("sibnet") -> emptyList()
+                    else -> listOf(Video(playerUrl, "$translation ($provider)", playerUrl, playerHeaders))
+                }
             }
+            .flatten()
             .distinctBy { it.videoUrl }
     }
 
