@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.ru.animego
 
+import aniyomi.lib.sibnetextractor.SibnetExtractor
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -24,6 +25,10 @@ class AnimeGOSource(
 
     // Обход Cloudflare
     override val client = network.cloudflareClient
+
+    private val kodikExtractor by lazy { KodikExtractor(client, baseUrl) }
+    private val aniboomExtractor by lazy { AniboomExtractor(client, baseUrl) }
+    private val sibnetExtractor by lazy { SibnetExtractor(client) }
 
     private val ajaxHeaders: Headers
         get() = headers.newBuilder()
@@ -204,9 +209,9 @@ class AnimeGOSource(
         val document = Jsoup.parse(content, baseUrl)
 
         return document.select("button[data-player]")
-            .mapNotNull { button ->
+            .flatMap { button ->
                 val rawUrl = button.attr("data-player").trim()
-                if (rawUrl.isBlank()) return@mapNotNull null
+                if (rawUrl.isBlank()) return@flatMap emptyList()
 
                 val playerUrl = when {
                     rawUrl.startsWith("//") -> "https:$rawUrl"
@@ -229,7 +234,26 @@ class AnimeGOSource(
                     .set("Referer", "$baseUrl/")
                     .build()
 
-                Video(playerUrl, "$translation ($provider)", playerUrl, playerHeaders)
+                val host = runCatching {
+                    java.net.URI(playerUrl).host.orEmpty().lowercase()
+                }.getOrDefault("")
+
+                // Пробуем достать прямые ссылки на видео через экстракторы.
+                // При любой ошибке возвращаем страницу плеера как fallback.
+                runCatching {
+                    when {
+                        host.contains("kodik") || host.contains("anivod") || host.contains("aniqit") ->
+                            kodikExtractor.videosFromUrl(playerUrl, "$translation: ")
+                        host.contains("aniboom") ->
+                            aniboomExtractor.videosFromUrl(playerUrl, "$translation: ")
+                        host.contains("sibnet") ->
+                            sibnetExtractor.videosFromUrl(playerUrl, "$translation: ")
+                        else -> emptyList()
+                    }
+                }.getOrElse { emptyList() }
+                    .ifEmpty {
+                        listOf(Video(playerUrl, "$translation ($provider)", playerUrl, playerHeaders))
+                    }
             }
             .distinctBy { it.videoUrl }
     }
