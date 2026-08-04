@@ -25,12 +25,11 @@ class AnimeGOSource(
 
     // ============================== Popular ==============================
     override fun popularAnimeRequest(page: Int): Request {
-        val url = if (page == 1) "$baseUrl/anime" else "$baseUrl/anime/$page"
+        val url = if (page == 1) "$baseUrl/anime?sort=rating" else "$baseUrl/anime/$page?sort=rating"
         return GET(url, headers)
     }
 
     override fun popularAnimeSelector(): String = "div.ani-list__item"
-
     override fun popularAnimeNextPageSelector(): String = "a.button-list-loading"
 
     override fun popularAnimeFromElement(element: Element): SAnime {
@@ -44,12 +43,12 @@ class AnimeGOSource(
 
     // ============================== Latest ==============================
     override fun latestUpdatesRequest(page: Int): Request {
-        val url = if (page == 1) "$baseUrl/anime" else "$baseUrl/anime/$page"
+        val url = if (page == 1) "$baseUrl/anime?sort=createdAt" else "$baseUrl/anime/$page?sort=createdAt"
         return GET(url, headers)
     }
 
-    override fun latestUpdatesSelector(): String = popularAnimeSelector()
-    override fun latestUpdatesNextPageSelector(): String = popularAnimeNextPageSelector()
+    override fun latestUpdatesSelector(): String = "div.ani-list__item"
+    override fun latestUpdatesNextPageSelector(): String = "a.button-list-loading"
 
     override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
@@ -81,21 +80,19 @@ class AnimeGOSource(
         anime.title = document.select("h1").text()
 
         // Описание
-        anime.description = document.select("div.description, .anime-description, .story, .about, .info-description").text()
+        anime.description = document.select("div.description").text()
 
         // Постер
-        anime.thumbnail_url = document.select("div.poster img, .anime-poster img, img.poster, .cover img, .image img").attr("abs:src")
+        anime.thumbnail_url = document.select("div.entity__poster img").attr("abs:src")
 
-        // Жанры (ищем в карточке или на странице деталей)
-        anime.genre = document.select("div.ani-list__item-genres a, .genres a, a[href*=genre]").joinToString { it.text() }
+        // Жанры
+        anime.genre = document.select("div.entity-field__genres a").joinToString { it.text() }
 
-        // Статус
-        val metaText = document.select("div.anime-info, .info, .meta, table, .details").text()
+        // Статус из meta
+        val statusText = document.select("div.entity-field div:contains(Статус) + div").text()
         anime.status = when {
-            metaText.contains("Онгоинг", ignoreCase = true) ||
-                metaText.contains("Выходит", ignoreCase = true) -> SAnime.ONGOING
-            metaText.contains("Завершён", ignoreCase = true) ||
-                metaText.contains("Вышел", ignoreCase = true) -> SAnime.COMPLETED
+            statusText.contains("Онгоинг", ignoreCase = true) -> SAnime.ONGOING
+            statusText.contains("Вышел", ignoreCase = true) -> SAnime.COMPLETED
             else -> SAnime.UNKNOWN
         }
 
@@ -103,36 +100,74 @@ class AnimeGOSource(
     }
 
     // ============================== Episodes ==============================
-    override fun episodeListSelector(): String = "div.episodes-list a, .episode-item a, table.episodes tr a, a[href*=episode], .series-list a, .episodes a"
+    override fun episodeListSelector(): String = "div.schedule-episodes-table__tbody .grid > div.g-col-4, div[data-number]"
+
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val document = response.asJsoup()
+        val episodes = mutableListOf<SEpisode>()
+
+        // Ищем строки с сериями в таблице
+        val rows = document.select("div.schedule-episodes-table__tbody .grid")
+
+        for (row in rows) {
+            // Номер серии из data-number или текста
+            val numberElement = row.selectFirst("div[data-number]")
+            val number = numberElement?.attr("data-number")?.toFloatOrNull()
+                ?: row.text().filter { it.isDigit() }.toFloatOrNull()
+                ?: continue
+
+            // Название серии
+            val nameElement = row.selectFirst("div.g-col-5 span[data-readmore], div.fw-bold span")
+            val name = nameElement?.text() ?: "Серия ${number.toInt()}"
+
+            // ID эпизода из data-episode
+            val episodeId = numberElement?.attr("data-episode") ?: ""
+
+            val episode = SEpisode.create().apply {
+                this.name = "$number. $name"
+                this.episode_number = number
+                // URL для загрузки плеера с конкретной серией
+                this.url = "/player/${extractAnimeId(response.request.url.toString())}?episode=$episodeId&number=$number"
+            }
+            episodes.add(episode)
+        }
+
+        // Если не нашли через таблицу, пробуем альтернативный метод
+        if (episodes.isEmpty()) {
+            return super.episodeListParse(response)
+        }
+
+        return episodes.sortedByDescending { it.episode_number }
+    }
 
     override fun episodeFromElement(element: Element): SEpisode {
+        // Fallback для стандартного парсера
         val episode = SEpisode.create()
-        episode.setUrlWithoutDomain(element.attr("href"))
-
-        val text = element.text()
-        episode.name = text.ifEmpty { "Серия" }
-
-        val numberRegex = Regex("""(\d+)\s*(?:серия|episode|ep)?""", RegexOption.IGNORE_CASE)
-        episode.episode_number = numberRegex.find(text)?.groupValues?.get(1)?.toFloatOrNull()
-            ?: element.attr("href").filter { it.isDigit() }.toFloatOrNull()
-            ?: 0f
-
+        val number = element.attr("data-number").toFloatOrNull() ?: 0f
+        episode.episode_number = number
+        episode.name = "Серия ${number.toInt()}"
+        episode.url = element.selectFirst("a")?.attr("href") ?: ""
         return episode
     }
 
     // ============================== Video ==============================
+    override fun videoListRequest(episode: SEpisode): Request {
+        // episode.url содержит /player/{id}?episode=...&number=...
+        return GET("$baseUrl${episode.url}", headers)
+    }
+
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videos = mutableListOf<Video>()
 
-        val iframes = document.select("iframe[src*=kodik], iframe[src*=player], iframe[src*=video], iframe[data-src], iframe[src*=sibnet], iframe[src*=vk], iframe[src*=aniboom]")
+        // Плеер загружается динамически, ищем iframe или ссылки на видео
+        val iframes = document.select("iframe[src*=kodik], iframe[src*=player], iframe[src*=video], iframe[data-src]")
 
         for (iframe in iframes) {
             val src = iframe.attr("abs:src").ifEmpty { iframe.attr("abs:data-src") }
             if (src.isNotEmpty()) {
                 val playerName = when {
                     src.contains("kodik") -> "Kodik"
-                    src.contains("aniboom") -> "AniBoom"
                     src.contains("sibnet") -> "Sibnet"
                     src.contains("vk") -> "VK"
                     else -> "AnimeGO Player"
@@ -141,18 +176,27 @@ class AnimeGOSource(
             }
         }
 
-        document.select("video source").forEach { source ->
-            val url = source.attr("abs:src")
-            val quality = source.attr("label").ifEmpty { "Default" }
-            if (url.isNotEmpty()) {
-                videos.add(Video(url, "Direct $quality", url, headers))
+        // Если iframe не найден, возможно видео в JSON или нужно дополнительный запрос
+        if (videos.isEmpty()) {
+            // Ищем ссылки в script или data-атрибутах
+            val scriptContent = document.select("script").html()
+            val videoUrlRegex = Regex("""https?://[^"'\s]+(?:\.m3u8|\.mp4|player\.php|video\.php)[^"'\s]*""")
+            val match = videoUrlRegex.find(scriptContent)
+            match?.let {
+                videos.add(Video(it.value, "Direct", it.value, headers))
             }
         }
 
         return videos
     }
 
-    override fun videoListSelector(): String = "video source, iframe"
+    override fun videoListSelector(): String = "iframe, video source"
     override fun videoFromElement(element: Element): Video = throw UnsupportedOperationException()
     override fun videoUrlParse(document: Document): String = throw UnsupportedOperationException()
+
+    // ============================== Helpers ==============================
+    private fun extractAnimeId(url: String): String {
+        // Из URL вида /anime/sekirei-3745 извлекаем 3745
+        return url.substringAfterLast("-").substringBefore("/")
+    }
 }
