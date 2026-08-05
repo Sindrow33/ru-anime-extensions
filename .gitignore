@@ -14,3 +14,6 @@ generated-src/
 .history
 signingkey.jks
 nul
+.backup/
+__pycache__/
+*.py[cod]
