@@ -31,6 +31,10 @@ class AnimeGOSource(
     private val cvhExtractor by lazy { CvhExtractor(client, baseUrl) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
 
+    // AnimeGO проверяет Referer у /player/videos/<episodeId>.
+    // Здесь хранится URL страницы тайтла, а не главная страница сайта.
+    private var episodeReferer = "$baseUrl/"
+
     private fun ajaxHeaders(referer: String): Headers = headers.newBuilder()
         .set("Accept", "application/json, text/javascript, */*; q=0.01")
         .set("X-Requested-With", "XMLHttpRequest")
@@ -186,6 +190,7 @@ class AnimeGOSource(
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val titleUrl = response.request.url.toString()
+        episodeReferer = titleUrl
         val titleDocument = Jsoup.parse(
             response.body.string(),
             titleUrl,
@@ -352,7 +357,7 @@ class AnimeGOSource(
             "$baseUrl/player/videos/${episode.url}"
         }
 
-        return GET(requestUrl, ajaxHeaders("$baseUrl/"))
+        return GET(requestUrl, ajaxHeaders(episodeReferer))
     }
 
     override fun videoListParse(response: Response): List<Video> {
