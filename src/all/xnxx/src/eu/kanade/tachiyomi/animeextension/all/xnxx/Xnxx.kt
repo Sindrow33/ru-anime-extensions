@@ -16,9 +16,6 @@ import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class Xnxx :
     ParsedAnimeHttpSource(),
@@ -36,11 +33,7 @@ class Xnxx :
 
     override fun popularAnimeSelector(): String = "div[id*='video_'].thumb-block"
 
-    override fun popularAnimeRequest(page: Int): Request {
-        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
-        val currentDate = sdf.format(Date())
-        return GET("$baseUrl/best/$currentDate/${page - 1}")
-    }
+    override fun popularAnimeRequest(page: Int): Request = if (page <= 1) GET("$baseUrl/best/", headers) else GET("$baseUrl/best/${page - 1}", headers)
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
