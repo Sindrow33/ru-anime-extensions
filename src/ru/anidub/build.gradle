@@ -1,0 +1,11 @@
+ext {
+    extName = 'AnidubDigital'
+    extClass = '.AnidubDigital'
+    extVersionCode = 1
+}
+
+apply plugin: "kei.plugins.extension.legacy"
+
+dependencies {
+    implementation(project(":lib:kodikextractor"))
+}

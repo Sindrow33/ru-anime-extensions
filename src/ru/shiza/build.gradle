@@ -1,0 +1,7 @@
+ext {
+    extName = 'SHIZA Project'
+    extClass = '.Shiza'
+    extVersionCode = 1
+}
+
+apply plugin: "kei.plugins.extension.legacy"

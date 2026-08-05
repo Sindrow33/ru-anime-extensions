@@ -1,0 +1,7 @@
+ext {
+    extName = 'FindAnime'
+    extClass = '.Findanime'
+    extVersionCode = 1
+}
+
+apply plugin: "kei.plugins.extension.legacy"

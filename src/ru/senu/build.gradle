@@ -1,0 +1,7 @@
+ext {
+    extName = 'Senu'
+    extClass = '.Senu'
+    extVersionCode = 1
+}
+
+apply plugin: "kei.plugins.extension.legacy"
