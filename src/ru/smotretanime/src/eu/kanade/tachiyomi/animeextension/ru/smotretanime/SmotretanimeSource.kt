@@ -1,20 +1,16 @@
 package eu.kanade.tachiyomi.animeextension.ru.smotretanime
 
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
-import keiyoushi.utils.useAsJsoup
 import okhttp3.Request
-import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class SmotretanimeSource(override val name: String, override val baseUrl: String) :
-    ParsedAnimeHttpSource() {
+class SmotretanimeSource(override val name: String, override val baseUrl: String) : ParsedAnimeHttpSource() {
 
     override val lang = "ru"
     override val supportsLatest = true
@@ -45,8 +41,7 @@ class SmotretanimeSource(override val name: String, override val baseUrl: String
     override fun latestUpdatesNextPageSelector(): String = popularAnimeNextPageSelector()
 
     // ============================== Search ==============================
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        GET("$baseUrl/index.php?do=search&subaction=search&story=$query&search_start=$page", headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET("$baseUrl/index.php?do=search&subaction=search&story=$query&search_start=$page", headers)
 
     override fun searchAnimeSelector(): String = popularAnimeSelector()
     override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
@@ -77,8 +72,7 @@ class SmotretanimeSource(override val name: String, override val baseUrl: String
     // ============================== Videos ==============================
     override fun videoListSelector(): String = "iframe[src]"
 
-    override fun videoFromElement(element: Element): Video =
-        Video(element.attr("src"), "Плеер", element.attr("src"))
+    override fun videoFromElement(element: Element): Video = Video(element.attr("src"), "Плеер", element.attr("src"))
 
     override fun videoUrlParse(document: Document): String = ""
 }
