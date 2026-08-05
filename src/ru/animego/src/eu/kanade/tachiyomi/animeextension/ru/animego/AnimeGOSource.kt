@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URI
 
 class AnimeGOSource(
     override val name: String,
@@ -23,262 +24,467 @@ class AnimeGOSource(
     override val lang = "ru"
     override val supportsLatest = true
 
-    // Обход Cloudflare
     override val client = network.cloudflareClient
 
     private val kodikExtractor by lazy { KodikExtractor(client, baseUrl) }
     private val aniboomExtractor by lazy { AniboomExtractor(client, baseUrl) }
+    private val cvhExtractor by lazy { CvhExtractor(client, baseUrl) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
 
-    private val ajaxHeaders: Headers
-        get() = headers.newBuilder()
-            .set("Accept", "application/json, text/javascript, */*; q=0.01")
-            .set("X-Requested-With", "XMLHttpRequest")
-            .set("Referer", "$baseUrl/")
-            .build()
+    private fun ajaxHeaders(referer: String): Headers = headers.newBuilder()
+        .set("Accept", "application/json, text/javascript, */*; q=0.01")
+        .set("X-Requested-With", "XMLHttpRequest")
+        .set("Referer", referer)
+        .build()
 
     // ============================== Popular ==============================
+
     override fun popularAnimeRequest(page: Int): Request {
-        val url = if (page == 1) "$baseUrl/anime?sort=rating" else "$baseUrl/anime/$page?sort=rating"
+        val url = if (page == 1) {
+            "$baseUrl/anime?sort=rating"
+        } else {
+            "$baseUrl/anime/$page?sort=rating"
+        }
         return GET(url, headers)
     }
 
     override fun popularAnimeSelector(): String = "div.ani-list__item"
+
     override fun popularAnimeNextPageSelector(): String = "a.button-list-loading"
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
-        val link = element.selectFirst("div.ani-list__item-title a")!!
+        val link = element.selectFirst("div.ani-list__item-title a[href*=/anime/]")
+            ?: element.selectFirst("a[href*=/anime/]")
+            ?: return anime
+
         anime.setUrlWithoutDomain(link.attr("href"))
-        anime.title = link.text()
-        anime.thumbnail_url = element.select("a.ani-list__item-picture img").attr("abs:src")
+        anime.title = link.attr("title").ifBlank { link.text() }
+        anime.thumbnail_url = imageUrl(
+            element.selectFirst(
+                "a.ani-list__item-picture img, img.image__img, img",
+            ),
+        )
+
         return anime
     }
 
     // ============================== Latest ==============================
+
     override fun latestUpdatesRequest(page: Int): Request {
-        val url = if (page == 1) "$baseUrl/anime?sort=createdAt" else "$baseUrl/anime/$page?sort=createdAt"
+        val url = if (page == 1) {
+            "$baseUrl/anime?sort=createdAt"
+        } else {
+            "$baseUrl/anime/$page?sort=createdAt"
+        }
         return GET(url, headers)
     }
 
-    override fun latestUpdatesSelector(): String = "div.ani-list__item"
-    override fun latestUpdatesNextPageSelector(): String = "a.button-list-loading"
+    override fun latestUpdatesSelector(): String = popularAnimeSelector()
+
+    override fun latestUpdatesNextPageSelector(): String = popularAnimeNextPageSelector()
 
     override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
     // ============================== Search ==============================
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val url = if (query.isNotEmpty()) {
-            "$baseUrl/search/all?q=$query"
+
+    override fun searchAnimeRequest(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): Request {
+        val url = if (query.isNotBlank()) {
+            "$baseUrl/search/all?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
+        } else if (page == 1) {
+            "$baseUrl/anime"
         } else {
-            if (page == 1) "$baseUrl/anime" else "$baseUrl/anime/$page"
+            "$baseUrl/anime/$page"
         }
+
         return GET(url, headers)
     }
 
-    override fun searchAnimeSelector(): String = "div.ani-list__item, div.search-result-item"
+    override fun searchAnimeSelector(): String = "div.ani-list__item, a.ajax-search__item, div.search-result-item"
+
     override fun searchAnimeNextPageSelector(): String = "a.button-list-loading"
 
     override fun searchAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
-        val link = element.selectFirst("div.ani-list__item-title a, a[href*=/anime/]")!!
+        val link = when {
+            element.tagName() == "a" && element.attr("href").contains("/anime/") ->
+                element
+            else ->
+                element.selectFirst(
+                    "div.ani-list__item-title a[href*=/anime/], " +
+                        "a.ajax-search__item[href*=/anime/], a[href*=/anime/]",
+                )
+        } ?: return anime
+
         anime.setUrlWithoutDomain(link.attr("href"))
-        anime.title = link.text()
-        anime.thumbnail_url = element.select("img").attr("abs:src")
+        anime.title = link.attr("title")
+            .ifBlank {
+                element.selectFirst(
+                    ".ajax-search__item-title, .ani-list__item-title",
+                )?.text().orEmpty()
+            }
+            .ifBlank { link.text() }
+
+        anime.thumbnail_url = imageUrl(element.selectFirst("img"))
+
         return anime
     }
 
     // ============================== Details ==============================
+
     override fun animeDetailsParse(document: Document): SAnime {
         val anime = SAnime.create()
-        anime.title = document.select("h1").text()
-        anime.description = document.select("div.description").text()
-        anime.thumbnail_url = document.select("div.entity__poster img").attr("abs:src")
-        anime.genre = document.select("div.entity-field__genres a").joinToString { it.text() }
 
-        val statusText = document.select("div.entity-field div:contains(Статус) + div").text()
+        anime.title = document.selectFirst("h1")?.text().orEmpty()
+        anime.description = document.selectFirst("div.description")
+            ?.text()
+            .orEmpty()
+
+        anime.thumbnail_url = imageUrl(
+            document.selectFirst(
+                ".entity__poster img.image__img, .entity__poster img, " +
+                    "meta[property=og:image]",
+            ),
+        )
+
+        anime.genre = document.select(
+            ".entity-field__genres a[href*=/anime/genre/]",
+        ).joinToString { it.text() }
+
+        val statusText = document.select(
+            ".entity-field.grid, .entity-field",
+        ).firstOrNull {
+            it.text().contains("Статус", ignoreCase = true)
+        }?.text().orEmpty()
+
         anime.status = when {
-            statusText.contains("Онгоинг", ignoreCase = true) -> SAnime.ONGOING
-            statusText.contains("Вышел", ignoreCase = true) -> SAnime.COMPLETED
+            statusText.contains("Онгоинг", ignoreCase = true) ->
+                SAnime.ONGOING
+            statusText.contains("Анонс", ignoreCase = true) ->
+                SAnime.LICENSED
+            statusText.contains("Вышел", ignoreCase = true) ||
+                statusText.contains("Заверш", ignoreCase = true) ->
+                SAnime.COMPLETED
             else -> SAnime.UNKNOWN
         }
+
         return anime
     }
 
     // ============================== Episodes ==============================
-    override fun episodeListRequest(anime: SAnime): Request {
-        val animeId = anime.url
-            .substringBefore("?")
-            .trimEnd('/')
-            .substringAfterLast("-")
-            .filter(Char::isDigit)
 
-        return GET("$baseUrl/player/$animeId", ajaxHeaders)
-    }
+    /*
+     * Сначала запрашиваем страницу тайтла. Нельзя брать player ID из хвоста
+     * slug: это соглашение AnimeGO, но не гарантия. Настоящий endpoint
+     * находится в .player__video[data-ajax-url].
+     */
+    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val body = response.body.string()
+        val titleUrl = response.request.url.toString()
+        val titleDocument = Jsoup.parse(
+            response.body.string(),
+            titleUrl,
+        )
 
-        val content = runCatching {
-            JSONObject(body)
-                .optJSONObject("data")
-                ?.optString("content")
-                .orEmpty()
-        }.getOrDefault("")
+        val playerPath = titleDocument.selectFirst(
+            ".player__video[data-ajax-url], [data-ajax-url^=/player/]",
+        )?.attr("data-ajax-url")
+            ?.trim()
+            .orEmpty()
 
+        if (playerPath.isBlank()) return emptyList()
+
+        val playerUrl = resolveUrl(playerPath)
+        val playerResponse = runCatching {
+            client.newCall(
+                GET(playerUrl, ajaxHeaders(titleUrl)),
+            ).execute().use { it.body.string() }
+        }.getOrNull() ?: return emptyList()
+
+        val content = jsonContent(playerResponse)
         if (content.isBlank()) return emptyList()
 
         val document = Jsoup.parse(content, baseUrl)
+        val playerId = playerUrl
+            .substringBefore("?")
+            .trimEnd('/')
+            .substringAfterLast('/')
 
-        // Собираем серии по любому элементу с data-episode или data-episode-number
-        val episodeElements = document.select("[data-episode], [data-episode-number]")
-            .filter { it.tagName() == "div" || it.tagName() == "button" || it.tagName() == "a" }
-
-        val episodes = episodeElements.mapNotNull { element ->
-            // ID серии: сначала data-episode, потом data-episode-id, потом data-id
-            val episodeId = element.attr("data-episode")
-                .ifBlank { element.attr("data-episode-id") }
-                .ifBlank { element.attr("data-id") }
-            if (episodeId.isBlank()) return@mapNotNull null
-
-            val rawNumber = element.attr("data-episode-number")
-                .ifBlank { element.attr("data-number") }
-            val number = Regex("""\d+(?:[.,]\d+)?""")
-                .find(rawNumber)
-                ?.value
-                ?.replace(',', '.')
-                ?.toFloatOrNull()
-                ?: return@mapNotNull null
-
-            val title = element.attr("data-episode-title")
-                .ifBlank { element.attr("data-title") }
-                .trim()
-
-            SEpisode.create().apply {
-                name = if (title.isNotBlank()) {
-                    "${number.cleanNumber()}. $title"
-                } else {
-                    "Серия ${number.cleanNumber()}"
-                }
-                episode_number = number
-                // Здесь хранится именно ID серии, а не ID аниме.
-                url = episodeId
+        val selectedEpisodeId = document.selectFirst(
+            "select[name=series] option[selected]",
+        )?.attr("value")
+            ?.ifBlank {
+                document.selectFirst(
+                    ".player-video-bar__item.active[data-episode], " +
+                        ".player-video-bar__item.selected[data-episode]",
+                )?.attr("data-episode").orEmpty()
             }
-        }
-            .distinctBy { it.url }
-            .sortedByDescending { it.episode_number }
+            .orEmpty()
 
-        // Fallback: если серий нет, но есть кнопки плееров — это фильм/спецвыпуск
+        val episodes = document.select(
+            ".player-video-bar__item[data-episode]",
+        ).mapNotNull { element ->
+            episodeFromPlayerElement(element, playerId, selectedEpisodeId)
+        }.distinctBy { it.url.substringAfterLast(':') }
+            .toMutableList()
+
+        /*
+         * В некоторых вариантах вёрстки плиток нет, но список серий
+         * присутствует в select.
+         */
         if (episodes.isEmpty()) {
-            val hasPlayers = document.select("button[data-player]").isNotEmpty()
-            if (hasPlayers) {
-                val animeId = response.request.url.pathSegments.last()
-                return listOf(
-                    SEpisode.create().apply {
-                        name = "Фильм"
-                        episode_number = 1f
-                        url = "film:$animeId"
-                    },
-                )
+            document.select(
+                "select[name=series] option[value]",
+            ).mapNotNullTo(episodes) { option ->
+                val episodeId = option.attr("value").trim()
+                if (episodeId.isBlank()) return@mapNotNullTo null
+
+                val rawNumber = option.attr("data-episode-number")
+                    .ifBlank { option.text() }
+
+                val number = parseEpisodeNumber(rawNumber)
+                    ?: return@mapNotNullTo null
+
+                val isInitial = episodeId == selectedEpisodeId
+
+                SEpisode.create().apply {
+                    name = "Серия ${number.cleanNumber()}"
+                    episode_number = number
+                    url = if (isInitial) {
+                        "initial:$playerId:$episodeId"
+                    } else {
+                        episodeId
+                    }
+                }
             }
         }
 
-        return episodes
+        val uniqueEpisodes = episodes
+            .distinctBy { it.url.substringAfterLast(':') }
+            .sortedByDescending { it.episode_number }
+            .toMutableList()
+
+        /*
+         * Если серия только одна, кнопки её плееров уже находятся в ответе
+         * /player/<id>. Повторный /player/videos/<episodeId> часто даёт 404.
+         */
+        if (uniqueEpisodes.size == 1) {
+            val episode = uniqueEpisodes.first()
+            val episodeId = episode.url.substringAfterLast(':')
+            episode.url = "initial:$playerId:$episodeId"
+        }
+
+        /*
+         * Фильм или спецвыпуск: списка серий нет, но плееры присутствуют.
+         */
+        if (uniqueEpisodes.isEmpty() && hasPlayerButtons(document)) {
+            return listOf(
+                SEpisode.create().apply {
+                    name = "Фильм"
+                    episode_number = 1f
+                    url = "initial:$playerId:film"
+                },
+            )
+        }
+
+        return uniqueEpisodes
     }
 
-    override fun episodeListSelector(): String = "[data-episode], [data-episode-number]"
+    private fun episodeFromPlayerElement(
+        element: Element,
+        playerId: String,
+        selectedEpisodeId: String,
+    ): SEpisode? {
+        val episodeId = element.attr("data-episode").trim()
+        if (episodeId.isBlank()) return null
+
+        val rawNumber = element.attr("data-episode-number")
+            .ifBlank { element.attr("data-number") }
+            .ifBlank { element.text() }
+
+        val number = parseEpisodeNumber(rawNumber) ?: return null
+
+        val title = element.attr("data-episode-title")
+            .ifBlank { element.attr("data-title") }
+            .trim()
+
+        val isInitial = episodeId == selectedEpisodeId
+
+        return SEpisode.create().apply {
+            name = if (title.isNotBlank()) {
+                "${number.cleanNumber()}. $title"
+            } else {
+                "Серия ${number.cleanNumber()}"
+            }
+            episode_number = number
+            url = if (isInitial) {
+                "initial:$playerId:$episodeId"
+            } else {
+                episodeId
+            }
+        }
+    }
+
+    private fun parseEpisodeNumber(value: String): Float? = Regex("""\d+(?:[.,]\d+)?""")
+        .find(value)
+        ?.value
+        ?.replace(',', '.')
+        ?.toFloatOrNull()
+
+    override fun episodeListSelector(): String = ".player-video-bar__item[data-episode]"
 
     override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException("Используется episodeListParse")
 
     // ============================== Video ==============================
+
     override fun videoListRequest(episode: SEpisode): Request {
-        val url = if (episode.url.startsWith("film:")) {
-            val animeId = episode.url.substringAfter("film:")
-            "$baseUrl/player/$animeId"
+        val requestUrl = if (episode.url.startsWith("initial:")) {
+            val playerId = episode.url
+                .removePrefix("initial:")
+                .substringBefore(':')
+            "$baseUrl/player/$playerId"
         } else {
             "$baseUrl/player/videos/${episode.url}"
         }
 
-        return GET(url, ajaxHeaders)
+        return GET(requestUrl, ajaxHeaders("$baseUrl/"))
     }
 
     override fun videoListParse(response: Response): List<Video> {
-        val body = response.body.string()
-
-        val content = runCatching {
-            JSONObject(body)
-                .optJSONObject("data")
-                ?.optString("content")
-                .orEmpty()
-        }.getOrDefault("")
-
+        val content = jsonContent(response.body.string())
         if (content.isBlank()) return emptyList()
 
         val document = Jsoup.parse(content, baseUrl)
 
-        return document.select("button[data-player]")
-            .mapNotNull { button ->
-                val rawUrl = button.attr("data-player").trim()
-                if (rawUrl.isBlank()) return@mapNotNull null
-
-                val playerUrl = when {
-                    rawUrl.startsWith("//") -> "https:$rawUrl"
-                    rawUrl.startsWith("/") -> "$baseUrl$rawUrl"
-                    rawUrl.startsWith("http") -> rawUrl
-                    else -> "https://$rawUrl"
-                }
-
-                val translation = button.attr("data-translation-title")
-                    .ifBlank { button.text().trim() }
-                    .ifBlank { "Неизвестная озвучка" }
-
-                val provider = button.attr("data-provider")
-                    .ifBlank {
-                        runCatching { java.net.URI(playerUrl).host }.getOrNull().orEmpty()
-                    }
-                    .ifBlank { "Player" }
-
-                val playerHeaders = headers.newBuilder()
-                    .set("Referer", "$baseUrl/")
-                    .build()
-
-                val host = runCatching {
-                    java.net.URI(playerUrl).host.orEmpty().lowercase()
-                }.getOrDefault("")
-
-                // Пробуем достать прямые ссылки на видео через экстракторы.
-                val extracted = runCatching {
-                    when {
-                        host.contains("kodik") || host.contains("anivod") || host.contains("aniqit") ->
-                            kodikExtractor.videosFromUrl(playerUrl, "$translation: ")
-                        host.contains("aniboom") ->
-                            aniboomExtractor.videosFromUrl(playerUrl, "$translation: ")
-                        host.contains("sibnet") ->
-                            sibnetExtractor.videosFromUrl(playerUrl, "$translation: ")
-                        else -> emptyList()
-                    }
-                }.getOrElse { emptyList() }
-
-                // Если экстрактор сработал — отдаём его видео.
-                // Если нет — для известных плееров не даём fallback на страницу,
-                // чтобы плеер не пытался воспроизвести HTML (Unrecognized file format).
-                when {
-                    extracted.isNotEmpty() -> extracted
-                    host.contains("kodik") || host.contains("anivod") || host.contains("aniqit") ||
-                        host.contains("aniboom") || host.contains("sibnet") -> emptyList()
-                    else -> listOf(Video(playerUrl, "$translation ($provider)", playerUrl, playerHeaders))
-                }
+        val translations = document.select("[data-translation]")
+            .associate { element ->
+                element.attr("data-translation") to element.text().trim()
             }
-            .flatten()
-            .distinctBy { it.videoUrl }
+
+        return document.select(
+            "[data-player][data-provider], button[data-player], [data-player]",
+        ).mapNotNull { button ->
+            val rawUrl = button.attr("data-player").trim()
+            if (rawUrl.isBlank()) return@mapNotNull null
+
+            val playerUrl = resolveUrl(rawUrl)
+
+            val translationId = button.attr("data-ptranslation")
+                .ifBlank { button.attr("data-translation") }
+
+            val translation = button.attr("data-translation-title")
+                .ifBlank { translations[translationId].orEmpty() }
+                .ifBlank { "Неизвестная озвучка" }
+
+            val provider = button.attr("data-provider-title")
+                .ifBlank { button.attr("data-provider") }
+                .ifBlank { playerHost(playerUrl) }
+                .ifBlank { "Player" }
+
+            PlayerButton(
+                url = playerUrl,
+                translation = translation,
+                provider = provider,
+            )
+        }.distinctBy {
+            "${it.translation}|${it.provider}|${it.url}"
+        }.flatMap { button ->
+            val prefix = "${button.translation} • "
+            val host = playerHost(button.url)
+
+            runCatching {
+                when {
+                    button.url.contains("/cdn-iframe/") ||
+                        host.contains("cdnvideohub") ->
+                        cvhExtractor.videosFromUrl(button.url, prefix)
+
+                    host.contains("kodik") ||
+                        host.contains("anivod") ||
+                        host.contains("aniqit") ->
+                        kodikExtractor.videosFromUrl(button.url, prefix)
+
+                    host.contains("aniboom") ->
+                        aniboomExtractor.videosFromUrl(button.url, prefix)
+
+                    host.contains("sibnet") ->
+                        sibnetExtractor.videosFromUrl(button.url, prefix)
+
+                    /*
+                     * Не передаём iframe как прямое видео. Иначе плеер
+                     * пытается воспроизвести HTML и показывает HTTP 404
+                     * или Unrecognized file format.
+                     */
+                    else -> emptyList()
+                }
+            }.getOrElse { emptyList() }
+        }.distinctBy { "${it.quality}|${it.videoUrl}" }
     }
 
-    override fun videoListSelector(): String = "button[data-player]"
+    override fun videoListSelector(): String = "[data-player][data-provider]"
 
     override fun videoFromElement(element: Element): Video = throw UnsupportedOperationException("Используется videoListParse")
 
     override fun videoUrlParse(document: Document): String = throw UnsupportedOperationException("Используется videoListParse")
 
     // ============================== Helpers ==============================
+
+    private fun jsonContent(body: String): String = runCatching {
+        JSONObject(body)
+            .optJSONObject("data")
+            ?.optString("content")
+            .orEmpty()
+    }.getOrDefault("")
+
+    private fun hasPlayerButtons(document: Document): Boolean = document.select("[data-player][data-provider], button[data-player]")
+        .isNotEmpty()
+
+    private fun imageUrl(element: Element?): String? {
+        if (element == null) return null
+
+        if (element.tagName() == "meta") {
+            return resolveUrl(element.attr("content"))
+                .takeUnless { it.isBlank() }
+        }
+
+        val candidate = listOf(
+            element.attr("data-src"),
+            element.attr("data-original"),
+            element.attr("data-lazy-src"),
+            element.attr("src"),
+            element.attr("srcset").substringBefore(' '),
+        ).firstOrNull {
+            it.isNotBlank() &&
+                !it.startsWith("data:image", ignoreCase = true)
+        }.orEmpty()
+
+        return resolveUrl(candidate).takeUnless { it.isBlank() }
+    }
+
+    private fun resolveUrl(value: String): String {
+        val url = value.trim()
+        return when {
+            url.isBlank() -> ""
+            url.startsWith("//") -> "https:$url"
+            url.startsWith("/") -> "$baseUrl$url"
+            url.startsWith("http://") || url.startsWith("https://") -> url
+            else -> "$baseUrl/${url.trimStart('/')}"
+        }
+    }
+
+    private fun playerHost(url: String): String = runCatching {
+        URI(url).host.orEmpty().lowercase()
+    }.getOrDefault("")
+
     private fun Float.cleanNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
+
+    private data class PlayerButton(
+        val url: String,
+        val translation: String,
+        val provider: String,
+    )
 }

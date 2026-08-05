@@ -13,7 +13,10 @@ class AniboomExtractor(
     private val baseUrl: String,
 ) {
 
-    fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
+    fun videosFromUrl(
+        url: String,
+        prefix: String = "",
+    ): List<Video> {
         val pageHeaders = Headers.headersOf(
             "Accept",
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -22,40 +25,126 @@ class AniboomExtractor(
         )
 
         val body = runCatching {
-            client.newCall(GET(url, pageHeaders)).execute().use { it.body.string() }
+            client.newCall(GET(url, pageHeaders))
+                .execute()
+                .use { response ->
+                    if (response.isSuccessful) {
+                        response.body.string()
+                    } else {
+                        ""
+                    }
+                }
+        }.getOrNull().orEmpty()
+
+        if (body.isBlank()) return emptyList()
+
+        val page = Jsoup.parse(body, url)
+
+        val rawParameters = page.selectFirst(
+            "#video[data-parameters], [data-parameters][data-player]",
+        )?.attr("data-parameters")
+            ?.ifBlank {
+                page.selectFirst("[data-parameters]")
+                    ?.attr("data-parameters")
+                    .orEmpty()
+            }
+            .orEmpty()
+
+        if (rawParameters.isBlank()) return emptyList()
+
+        val parameters = runCatching {
+            JSONObject(rawParameters)
         }.getOrNull() ?: return emptyList()
 
-        val data = Jsoup.parse(body, url)
-            .selectFirst("#video[data-parameters]")
-            ?.attr("data-parameters")
-            ?: return emptyList()
+        val hls = sourceFrom(parameters, "hls").fixProtocol()
+        val dash = sourceFrom(parameters, "dash").fixProtocol()
 
-        val json = runCatching { JSONObject(data) }.getOrNull() ?: return emptyList()
-        val hls = json.optJSONObject("hls")?.optString("src").orEmpty().fixProtocol()
-        val dash = json.optJSONObject("dash")?.optString("src").orEmpty().fixProtocol()
-        if (hls.isBlank()) return emptyList()
+        if (hls.isBlank() && dash.isBlank()) return emptyList()
 
-        val host = url.toHttpUrl().host
-        // Заголовки обязательны в Title Case, иначе ссылки отдают 403
+        val host = runCatching { url.toHttpUrl().host }
+            .getOrDefault("aniboom.one")
+
         val videoHeaders = Headers.headersOf(
             "Referer",
             "https://$host/",
             "Accept-Language",
-            "ru-RU",
+            "ru-RU,ru;q=0.9,en;q=0.8",
             "Origin",
             "https://$host",
         )
 
-        // Иногда бэкенд кладёт m3u8 в ключ dash — тогда отдаём только HLS
-        return if (dash.isBlank() || dash.endsWith(".m3u8")) {
-            listOf(Video(hls, "${prefix}Aniboom HLS", hls, headers = videoHeaders))
-        } else {
-            listOf(
-                Video(dash, "${prefix}Aniboom DASH", dash, headers = videoHeaders),
-                Video(hls, "${prefix}Aniboom HLS", hls, headers = videoHeaders),
-            )
+        return buildList {
+            if (dash.isNotBlank() && !dash.contains(".m3u8")) {
+                add(
+                    Video(
+                        dash,
+                        "${prefix}AniBoom DASH",
+                        dash,
+                        headers = videoHeaders,
+                    ),
+                )
+            }
+
+            if (hls.isNotBlank()) {
+                add(
+                    Video(
+                        hls,
+                        "${prefix}AniBoom HLS",
+                        hls,
+                        headers = videoHeaders,
+                    ),
+                )
+            }
+
+            if (hls.isBlank() && dash.isNotBlank()) {
+                add(
+                    Video(
+                        dash,
+                        "${prefix}AniBoom",
+                        dash,
+                        headers = videoHeaders,
+                    ),
+                )
+            }
+        }.distinctBy { it.videoUrl }
+    }
+
+    /*
+     * AniBoom встречается в двух форматах:
+     *
+     * "hls": {"src": "..."}
+     *
+     * и:
+     *
+     * "hls": "{\"src\":\"...\"}"
+     */
+    private fun sourceFrom(
+        json: JSONObject,
+        key: String,
+    ): String {
+        val value = json.opt(key)
+
+        return when (value) {
+            is JSONObject -> value.optString("src")
+            is String -> {
+                val trimmed = value.trim()
+
+                runCatching {
+                    JSONObject(trimmed).optString("src")
+                }.getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: trimmed.takeIf {
+                        it.startsWith("http") ||
+                            it.startsWith("//")
+                    }.orEmpty()
+            }
+            else -> ""
         }
     }
 
-    private fun String.fixProtocol(): String = if (startsWith("//")) "https:$this" else this
+    private fun String.fixProtocol(): String = when {
+        startsWith("//") -> "https:$this"
+        startsWith("http://") -> replaceFirst("http://", "https://")
+        else -> this
+    }
 }
