@@ -1,0 +1,8 @@
+ext {
+    extName = 'Pornhub'
+    extClass = '.Pornhub'
+    extVersionCode = 1
+    containsNsfw = true
+}
+
+apply plugin: "kei.plugins.extension.legacy"
