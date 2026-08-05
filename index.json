@@ -1,5 +1,127 @@
 [
   {
+    "name": "Aniyomi: Jable",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.jable",
+    "apk": "aniyomi-all.jable-v14.2.apk",
+    "lang": "all",
+    "code": 2,
+    "version": "14.2",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Jable",
+        "lang": "zh",
+        "id": "4927468808524123411",
+        "baseUrl": "https://jable.tv",
+        "versionId": 1
+      },
+      {
+        "name": "Jable",
+        "lang": "en",
+        "id": "889668913079212135",
+        "baseUrl": "https://jable.tv",
+        "versionId": 1
+      },
+      {
+        "name": "Jable",
+        "lang": "ja",
+        "id": "7335707215680841826",
+        "baseUrl": "https://jable.tv",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: JavGG",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.javgg",
+    "apk": "aniyomi-all.javgg-v14.19.apk",
+    "lang": "all",
+    "code": 19,
+    "version": "14.19",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "JavGG",
+        "lang": "all",
+        "id": "3378993382379910095",
+        "baseUrl": "https://javgg.net",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Jav Guru",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.javguru",
+    "apk": "aniyomi-all.javguru-v14.43.apk",
+    "lang": "all",
+    "code": 43,
+    "version": "14.43",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Jav Guru",
+        "lang": "all",
+        "id": "8546813608934181796",
+        "baseUrl": "https://jav.guru",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Pornhub",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.pornhub",
+    "apk": "aniyomi-all.pornhub-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Pornhub",
+        "lang": "all",
+        "id": "163747473533778320",
+        "baseUrl": "https://pornhub.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Xnxx",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.xnxx",
+    "apk": "aniyomi-all.xnxx-v14.3.apk",
+    "lang": "all",
+    "code": 3,
+    "version": "14.3",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Xnxx",
+        "lang": "all",
+        "id": "1853973586604481267",
+        "baseUrl": "https://www.xnxx.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Xvideos",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.xvideos",
+    "apk": "aniyomi-all.xvideos-v14.3.apk",
+    "lang": "all",
+    "code": 3,
+    "version": "14.3",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Xvideos",
+        "lang": "all",
+        "id": "8016727706963226859",
+        "baseUrl": "https://www.xvideos.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Amd",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.amd",
     "apk": "aniyomi-ru.amd-v14.1.apk",
