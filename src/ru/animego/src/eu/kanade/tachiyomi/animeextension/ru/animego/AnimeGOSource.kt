@@ -288,7 +288,7 @@ class AnimeGOSource(
          * Полный список серий читаем непосредственно из сырого HTML.
          */
         val optionEpisodes = Regex(
-            """<option\\b[^>]*\\bvalue\\s*=\\s*["'](\\d+)["'][^>]*>(.*?)</option>""",
+            """<option\b[^>]*\bvalue\s*=\s*["'](\d+)["'][^>]*>(.*?)</option>""",
             setOf(
                 RegexOption.IGNORE_CASE,
                 RegexOption.DOT_MATCHES_ALL,
@@ -400,7 +400,8 @@ class AnimeGOSource(
 
     // ============================== Video ==============================
 
-    private val episodeRefererMarker = "#animego-ref="
+    private val episodeRefererMarker = "::animego-ref="
+    private val legacyEpisodeRefererMarker = "#animego-ref="
 
     private fun episodeUrl(rawUrl: String): String {
         val encodedReferer = URLEncoder.encode(
@@ -410,14 +411,26 @@ class AnimeGOSource(
         return "$rawUrl$episodeRefererMarker$encodedReferer"
     }
 
-    private fun rawEpisodeUrl(url: String): String = url.substringBefore(episodeRefererMarker)
+    private fun rawEpisodeUrl(url: String): String = url
+        .substringBefore(episodeRefererMarker)
+        .substringBefore(legacyEpisodeRefererMarker)
 
-    private fun episodeRefererFromUrl(url: String): String = url.substringAfter(episodeRefererMarker, "")
-        .takeIf { it.isNotBlank() }
-        ?.let {
-            URLDecoder.decode(it, Charsets.UTF_8.name())
+    private fun episodeRefererFromUrl(url: String): String {
+        val encodedReferer = when {
+            url.contains(episodeRefererMarker) ->
+                url.substringAfter(episodeRefererMarker)
+            url.contains(legacyEpisodeRefererMarker) ->
+                url.substringAfter(legacyEpisodeRefererMarker)
+            else -> ""
         }
-        ?: episodeReferer
+
+        return encodedReferer
+            .takeIf { it.isNotBlank() }
+            ?.let {
+                URLDecoder.decode(it, Charsets.UTF_8.name())
+            }
+            ?: episodeReferer
+    }
 
     override fun videoListRequest(episode: SEpisode): Request {
         val rawUrl = rawEpisodeUrl(episode.url)
