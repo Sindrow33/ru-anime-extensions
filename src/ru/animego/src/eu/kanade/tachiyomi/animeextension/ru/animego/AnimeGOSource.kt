@@ -151,7 +151,7 @@ class AnimeGOSource(
         filters: AnimeFilterList,
     ): Request {
         val url = if (query.isNotBlank()) {
-            "$baseUrl/search/all?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
+            "$baseUrl/search/anime?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
         } else if (page == 1) {
             "$baseUrl/anime"
         } else {
@@ -400,31 +400,67 @@ class AnimeGOSource(
 
     // ============================== Video ==============================
 
-    private val episodeRefererMarker = "::animego-ref="
+    private val episodeRefererParameter = "animego_ref"
     private val legacyEpisodeRefererMarker = "#animego-ref="
+    private val legacyEpisodeRefererMarkerV2 = "::animego-ref="
 
+    /*
+     * В базе Tadami URL серии должен выглядеть как обычный URL-путь.
+     * Нестандартные строки вида "31683::animego-ref=..." могут
+     * неправильно кэшироваться или объединяться приложением.
+     */
     private fun episodeUrl(rawUrl: String): String {
         val encodedReferer = URLEncoder.encode(
             episodeReferer,
             Charsets.UTF_8.name(),
         )
-        return "$rawUrl$episodeRefererMarker$encodedReferer"
+
+        val requestPath = if (rawUrl.startsWith("initial:")) {
+            val playerId = rawUrl
+                .removePrefix("initial:")
+                .substringBefore(':')
+            "/player/$playerId"
+        } else {
+            val episodeId = rawUrl
+                .substringBefore('?')
+                .substringAfterLast('/')
+            "/player/videos/$episodeId"
+        }
+
+        return "$requestPath?$episodeRefererParameter=$encodedReferer"
     }
 
-    private fun rawEpisodeUrl(url: String): String = url
-        .substringBefore(episodeRefererMarker)
-        .substringBefore(legacyEpisodeRefererMarker)
+    private fun rawEpisodeUrl(url: String): String {
+        val requestPath = url.substringBefore('?')
+
+        return when {
+            requestPath.startsWith("/player/videos/") ->
+                requestPath.substringAfterLast('/')
+            requestPath.startsWith("/player/") ->
+                "initial:${requestPath.substringAfterLast('/')}:film"
+            else ->
+                url.substringBefore(legacyEpisodeRefererMarkerV2)
+                    .substringBefore(legacyEpisodeRefererMarker)
+        }
+    }
 
     private fun episodeRefererFromUrl(url: String): String {
-        val encodedReferer = when {
-            url.contains(episodeRefererMarker) ->
-                url.substringAfter(episodeRefererMarker)
+        val queryReferer = url
+            .substringAfter(
+                "$episodeRefererParameter=",
+                "",
+            )
+            .substringBefore('&')
+
+        val legacyReferer = when {
+            url.contains(legacyEpisodeRefererMarkerV2) ->
+                url.substringAfter(legacyEpisodeRefererMarkerV2)
             url.contains(legacyEpisodeRefererMarker) ->
                 url.substringAfter(legacyEpisodeRefererMarker)
             else -> ""
         }
 
-        return encodedReferer
+        return (queryReferer.ifBlank { legacyReferer })
             .takeIf { it.isNotBlank() }
             ?.let {
                 URLDecoder.decode(it, Charsets.UTF_8.name())
@@ -433,16 +469,24 @@ class AnimeGOSource(
     }
 
     override fun videoListRequest(episode: SEpisode): Request {
-        val rawUrl = rawEpisodeUrl(episode.url)
         val referer = episodeRefererFromUrl(episode.url)
+        val storedPath = episode.url.substringBefore('?')
 
-        val requestUrl = if (rawUrl.startsWith("initial:")) {
-            val playerId = rawUrl
-                .removePrefix("initial:")
-                .substringBefore(':')
-            "$baseUrl/player/$playerId"
-        } else {
-            "$baseUrl/player/videos/$rawUrl"
+        val requestUrl = when {
+            storedPath.startsWith("/player/") ->
+                resolveUrl(storedPath)
+            else -> {
+                val rawUrl = rawEpisodeUrl(episode.url)
+
+                if (rawUrl.startsWith("initial:")) {
+                    val playerId = rawUrl
+                        .removePrefix("initial:")
+                        .substringBefore(':')
+                    "$baseUrl/player/$playerId"
+                } else {
+                    "$baseUrl/player/videos/$rawUrl"
+                }
+            }
         }
 
         return GET(requestUrl, ajaxHeaders(referer))
