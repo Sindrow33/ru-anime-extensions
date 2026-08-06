@@ -268,10 +268,10 @@
   {
     "name": "Aniyomi: AnimeGO",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animego",
-    "apk": "aniyomi-ru.animego-v14.19.apk",
+    "apk": "aniyomi-ru.animego-v14.20.apk",
     "lang": "ru",
-    "code": 19,
-    "version": "14.19",
+    "code": 20,
+    "version": "14.20",
     "nsfw": 0,
     "sources": [
       {
