@@ -161,7 +161,9 @@ class AnimeGOSource(
         return GET(url, headers)
     }
 
-    override fun searchAnimeSelector(): String = "div.ani-list__item, a.ajax-search__item, div.search-result-item"
+    override fun searchAnimeSelector(): String =
+        "div.ani-grid__item, div.ani-list__item, " +
+            "a.ajax-search__item, div.search-result-item"
 
     override fun searchAnimeNextPageSelector(): String = "a.button-list-loading"
 
@@ -172,7 +174,8 @@ class AnimeGOSource(
                 element
             else ->
                 element.selectFirst(
-                    "div.ani-list__item-title a[href*=/anime/], " +
+                    "div.ani-grid__item-title a[href*=/anime/], " +
+                        "div.ani-list__item-title a[href*=/anime/], " +
                         "a.ajax-search__item[href*=/anime/], a[href*=/anime/]",
                 )
         } ?: return anime
@@ -181,7 +184,8 @@ class AnimeGOSource(
         anime.title = link.attr("title")
             .ifBlank {
                 element.selectFirst(
-                    ".ajax-search__item-title, .ani-list__item-title",
+                    ".ani-grid__item-title, " +
+                        ".ajax-search__item-title, .ani-list__item-title",
                 )?.text().orEmpty()
             }
             .ifBlank { link.text() }
@@ -235,36 +239,34 @@ class AnimeGOSource(
     // ============================== Episodes ==============================
 
     /*
-     * Сначала запрашиваем страницу тайтла. Нельзя брать player ID из хвоста
-     * slug: это соглашение AnimeGO, но не гарантия. Настоящий endpoint
-     * находится в .player__video[data-ajax-url].
+     * ID плеера находится в конце URL тайтла. Запрашиваем /player/<id>
+     * напрямую, чтобы запрос выполнялся стандартным механизмом источника,
+     * а не вложенным синхронным client.newCall().
      */
-    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+    override fun episodeListRequest(anime: SAnime): Request {
+        val titleUrl = resolveUrl(anime.url)
+        episodeReferer = titleUrl
+
+        val titlePath = titleUrl
+            .substringBefore('?')
+            .substringBefore('#')
+            .trimEnd('/')
+
+        val playerId = Regex("""-(\d+)(?::\d+)?$""")
+            .find(titlePath)
+            ?.groupValues
+            ?.getOrNull(1)
+
+        return if (playerId != null) {
+            GET("$baseUrl/player/$playerId", ajaxHeaders(titleUrl))
+        } else {
+            GET(titleUrl, headers)
+        }
+    }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val titleUrl = response.request.url.toString()
-        episodeReferer = titleUrl
-        val titleDocument = Jsoup.parse(
-            response.body.string(),
-            titleUrl,
-        )
-
-        val playerPath = titleDocument.selectFirst(
-            ".player__video[data-ajax-url], [data-ajax-url^=/player/]",
-        )?.attr("data-ajax-url")
-            ?.trim()
-            .orEmpty()
-
-        if (playerPath.isBlank()) return emptyList()
-
-        val playerUrl = resolveUrl(playerPath)
-        val playerResponse = runCatching {
-            client.newCall(
-                GET(playerUrl, ajaxHeaders(titleUrl)),
-            ).execute().use { it.body.string() }
-        }.getOrNull() ?: return emptyList()
-
-        val content = jsonContent(playerResponse)
+        val playerUrl = response.request.url.toString()
+        val content = jsonContent(response.body.string())
         if (content.isBlank()) return emptyList()
 
         val document = Jsoup.parse(content, baseUrl)
