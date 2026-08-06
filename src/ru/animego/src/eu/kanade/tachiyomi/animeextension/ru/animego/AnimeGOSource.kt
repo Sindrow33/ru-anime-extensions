@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.ru.animego
 
 import aniyomi.lib.sibnetextractor.SibnetExtractor
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -57,6 +58,30 @@ class AnimeGOSource(
     override fun popularAnimeSelector(): String = "div.ani-list__item"
 
     override fun popularAnimeNextPageSelector(): String = "a.button-list-loading"
+
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val document = Jsoup.parse(
+            response.body.string(),
+            response.request.url.toString(),
+        )
+
+        val anime = document.select(popularAnimeSelector())
+            .map { popularAnimeFromElement(it) }
+            .filter { it.url.isNotBlank() && it.title.isNotBlank() }
+            .distinctBy {
+                it.url
+                    .substringBefore('?')
+                    .substringBefore('#')
+                    .trimEnd('/')
+                    .lowercase()
+            }
+
+        val hasNextPage = document.selectFirst(
+            popularAnimeNextPageSelector(),
+        ) != null
+
+        return AnimesPage(anime, hasNextPage)
+    }
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
@@ -241,35 +266,25 @@ class AnimeGOSource(
             .toMutableList()
 
         /*
-         * В некоторых вариантах вёрстки плиток нет, но список серий
-         * присутствует в select.
+         * AnimeGO может показывать в плитках только последние серии,
+         * а полный список хранить в select[name=series].
          */
-        if (episodes.isEmpty()) {
-            document.select(
-                "select[name=series] option[value]",
-            ).mapNotNullTo(episodes) { option ->
-                val episodeId = option.attr("value").trim()
-                if (episodeId.isBlank()) return@mapNotNullTo null
+        document.select(
+            "select[name=series] option[value]",
+        ).mapNotNullTo(episodes) { option ->
+            val episodeId = option.attr("value").trim()
+            if (episodeId.isBlank()) return@mapNotNullTo null
 
-                val rawNumber = option.attr("data-episode-number")
-                    .ifBlank { option.text() }
+            val rawNumber = option.attr("data-episode-number")
+                .ifBlank { option.text() }
 
-                val number = parseEpisodeNumber(rawNumber)
-                    ?: return@mapNotNullTo null
+            val number = parseEpisodeNumber(rawNumber)
+                ?: return@mapNotNullTo null
 
-                val isInitial = episodeId == selectedEpisodeId
-
-                SEpisode.create().apply {
-                    name = "Серия ${number.cleanNumber()}"
-                    episode_number = number
-                    url = episodeUrl(
-                        if (isInitial) {
-                            episodeId
-                        } else {
-                            episodeId
-                        },
-                    )
-                }
+            SEpisode.create().apply {
+                name = "Серия ${number.cleanNumber()}"
+                episode_number = number
+                url = episodeUrl(episodeId)
             }
         }
 
