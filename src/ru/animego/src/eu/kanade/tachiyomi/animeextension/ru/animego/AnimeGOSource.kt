@@ -46,7 +46,6 @@ class AnimeGOSource(
 
     // ============================== Popular ==============================
 
-
     private val popularSeenKeys = mutableSetOf<String>()
 
     private fun popularAnimeKey(anime: SAnime): String {
@@ -62,7 +61,6 @@ class AnimeGOSource(
             ?.getOrNull(1)
             ?: normalized
     }
-
 
     override fun popularAnimeRequest(page: Int): Request {
         val url = if (page == 1) {
