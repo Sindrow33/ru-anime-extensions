@@ -46,6 +46,24 @@ class AnimeGOSource(
 
     // ============================== Popular ==============================
 
+
+    private val popularSeenKeys = mutableSetOf<String>()
+
+    private fun popularAnimeKey(anime: SAnime): String {
+        val normalized = anime.url
+            .substringBefore('?')
+            .substringBefore('#')
+            .trimEnd('/')
+            .lowercase()
+
+        return Regex("""-(\d+)(?::\d+)?$""")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: normalized
+    }
+
+
     override fun popularAnimeRequest(page: Int): Request {
         val url = if (page == 1) {
             "$baseUrl/anime?sort=rating"
@@ -65,16 +83,26 @@ class AnimeGOSource(
             response.request.url.toString(),
         )
 
-        val anime = document.select(popularAnimeSelector())
+        val requestUrl = response.request.url.toString()
+            .substringBefore('?')
+            .trimEnd('/')
+
+        if (requestUrl == "$baseUrl/anime") {
+            synchronized(popularSeenKeys) {
+                popularSeenKeys.clear()
+            }
+        }
+
+        val pageAnime = document.select(popularAnimeSelector())
             .map { popularAnimeFromElement(it) }
             .filter { it.url.isNotBlank() && it.title.isNotBlank() }
-            .distinctBy {
-                it.url
-                    .substringBefore('?')
-                    .substringBefore('#')
-                    .trimEnd('/')
-                    .lowercase()
+            .distinctBy { popularAnimeKey(it) }
+
+        val anime = synchronized(popularSeenKeys) {
+            pageAnime.filter { item ->
+                popularSeenKeys.add(popularAnimeKey(item))
             }
+        }
 
         val hasNextPage = document.selectFirst(
             popularAnimeNextPageSelector(),
@@ -258,34 +286,40 @@ class AnimeGOSource(
             }
             .orEmpty()
 
-        val episodes = document.select(
-            ".player-video-bar__item[data-episode]",
-        ).mapNotNull { element ->
-            episodeFromPlayerElement(element, playerId, selectedEpisodeId)
-        }.distinctBy { rawEpisodeUrl(it.url).substringAfterLast(':') }
-            .toMutableList()
-
         /*
-         * AnimeGO может показывать в плитках только последние серии,
-         * а полный список хранить в select[name=series].
+         * Полный список серий читаем непосредственно из сырого HTML.
          */
-        document.select(
-            "select[name=series] option[value]",
-        ).mapNotNullTo(episodes) { option ->
-            val episodeId = option.attr("value").trim()
-            if (episodeId.isBlank()) return@mapNotNullTo null
-
-            val rawNumber = option.attr("data-episode-number")
-                .ifBlank { option.text() }
-
-            val number = parseEpisodeNumber(rawNumber)
-                ?: return@mapNotNullTo null
+        val optionEpisodes = Regex(
+            """<option\\b[^>]*\\bvalue\\s*=\\s*["'](\\d+)["'][^>]*>(.*?)</option>""",
+            setOf(
+                RegexOption.IGNORE_CASE,
+                RegexOption.DOT_MATCHES_ALL,
+            ),
+        ).findAll(content).mapNotNull { match ->
+            val episodeId = match.groupValues[1].trim()
+            val optionText = Jsoup.parse(match.groupValues[2]).text()
+            val number = parseEpisodeNumber(optionText)
+                ?: return@mapNotNull null
 
             SEpisode.create().apply {
                 name = "Серия ${number.cleanNumber()}"
                 episode_number = number
                 url = episodeUrl(episodeId)
             }
+        }.toList()
+
+        val episodes = if (optionEpisodes.isNotEmpty()) {
+            optionEpisodes.toMutableList()
+        } else {
+            document.select(
+                ".player-video-bar__item[data-episode]",
+            ).mapNotNull { element ->
+                episodeFromPlayerElement(
+                    element,
+                    playerId,
+                    selectedEpisodeId,
+                )
+            }.toMutableList()
         }
 
         val uniqueEpisodes = episodes
