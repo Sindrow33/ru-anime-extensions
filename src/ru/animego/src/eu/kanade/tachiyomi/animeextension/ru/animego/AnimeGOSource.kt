@@ -264,7 +264,7 @@ class AnimeGOSource(
                     episode_number = number
                     url = episodeUrl(
                         if (isInitial) {
-                            "initial:$playerId:$episodeId"
+                            episodeId
                         } else {
                             episodeId
                         },
@@ -285,7 +285,7 @@ class AnimeGOSource(
         if (uniqueEpisodes.size == 1) {
             val episode = uniqueEpisodes.first()
             val episodeId = rawEpisodeUrl(episode.url).substringAfterLast(':')
-            episode.url = episodeUrl("initial:$playerId:$episodeId")
+            episode.url = episodeUrl(episodeId)
         }
 
         /*
@@ -333,7 +333,7 @@ class AnimeGOSource(
             episode_number = number
             url = episodeUrl(
                 if (isInitial) {
-                    "initial:$playerId:$episodeId"
+                    episodeId
                 } else {
                     episodeId
                 },
