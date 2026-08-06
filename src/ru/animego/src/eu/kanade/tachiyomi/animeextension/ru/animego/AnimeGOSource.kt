@@ -15,6 +15,8 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 class AnimeGOSource(
     override val name: String,
@@ -235,7 +237,7 @@ class AnimeGOSource(
             ".player-video-bar__item[data-episode]",
         ).mapNotNull { element ->
             episodeFromPlayerElement(element, playerId, selectedEpisodeId)
-        }.distinctBy { it.url.substringAfterLast(':') }
+        }.distinctBy { rawEpisodeUrl(it.url).substringAfterLast(':') }
             .toMutableList()
 
         /*
@@ -260,17 +262,19 @@ class AnimeGOSource(
                 SEpisode.create().apply {
                     name = "Серия ${number.cleanNumber()}"
                     episode_number = number
-                    url = if (isInitial) {
-                        "initial:$playerId:$episodeId"
-                    } else {
-                        episodeId
-                    }
+                    url = episodeUrl(
+                        if (isInitial) {
+                            "initial:$playerId:$episodeId"
+                        } else {
+                            episodeId
+                        },
+                    )
                 }
             }
         }
 
         val uniqueEpisodes = episodes
-            .distinctBy { it.url.substringAfterLast(':') }
+            .distinctBy { rawEpisodeUrl(it.url).substringAfterLast(':') }
             .sortedByDescending { it.episode_number }
             .toMutableList()
 
@@ -280,8 +284,8 @@ class AnimeGOSource(
          */
         if (uniqueEpisodes.size == 1) {
             val episode = uniqueEpisodes.first()
-            val episodeId = episode.url.substringAfterLast(':')
-            episode.url = "initial:$playerId:$episodeId"
+            val episodeId = rawEpisodeUrl(episode.url).substringAfterLast(':')
+            episode.url = episodeUrl("initial:$playerId:$episodeId")
         }
 
         /*
@@ -292,7 +296,7 @@ class AnimeGOSource(
                 SEpisode.create().apply {
                     name = "Фильм"
                     episode_number = 1f
-                    url = "initial:$playerId:film"
+                    url = episodeUrl("initial:$playerId:film")
                 },
             )
         }
@@ -327,11 +331,13 @@ class AnimeGOSource(
                 "Серия ${number.cleanNumber()}"
             }
             episode_number = number
-            url = if (isInitial) {
-                "initial:$playerId:$episodeId"
-            } else {
-                episodeId
-            }
+            url = episodeUrl(
+                if (isInitial) {
+                    "initial:$playerId:$episodeId"
+                } else {
+                    episodeId
+                },
+            )
         }
     }
 
@@ -347,17 +353,39 @@ class AnimeGOSource(
 
     // ============================== Video ==============================
 
+    private val episodeRefererMarker = "#animego-ref="
+
+    private fun episodeUrl(rawUrl: String): String {
+        val encodedReferer = URLEncoder.encode(
+            episodeReferer,
+            Charsets.UTF_8.name(),
+        )
+        return "$rawUrl$episodeRefererMarker$encodedReferer"
+    }
+
+    private fun rawEpisodeUrl(url: String): String = url.substringBefore(episodeRefererMarker)
+
+    private fun episodeRefererFromUrl(url: String): String = url.substringAfter(episodeRefererMarker, "")
+        .takeIf { it.isNotBlank() }
+        ?.let {
+            URLDecoder.decode(it, Charsets.UTF_8.name())
+        }
+        ?: episodeReferer
+
     override fun videoListRequest(episode: SEpisode): Request {
-        val requestUrl = if (episode.url.startsWith("initial:")) {
-            val playerId = episode.url
+        val rawUrl = rawEpisodeUrl(episode.url)
+        val referer = episodeRefererFromUrl(episode.url)
+
+        val requestUrl = if (rawUrl.startsWith("initial:")) {
+            val playerId = rawUrl
                 .removePrefix("initial:")
                 .substringBefore(':')
             "$baseUrl/player/$playerId"
         } else {
-            "$baseUrl/player/videos/${episode.url}"
+            "$baseUrl/player/videos/$rawUrl"
         }
 
-        return GET(requestUrl, ajaxHeaders(episodeReferer))
+        return GET(requestUrl, ajaxHeaders(referer))
     }
 
     override fun videoListParse(response: Response): List<Video> {

@@ -1,7 +1,7 @@
 ext {
     extName = 'AnimeGO'
     extClass = '.AnimeGO'
-    extVersionCode = 13
+    extVersionCode = 14
     isNsfw = false
 }
 
