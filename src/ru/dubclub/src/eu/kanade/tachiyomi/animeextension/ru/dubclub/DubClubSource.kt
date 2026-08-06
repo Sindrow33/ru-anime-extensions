@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import keiyoushi.utils.useAsJsoup
 import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
@@ -25,52 +26,65 @@ class DubClubSource(
 
     // ============================ Popular / Latest ============================
 
-    override fun popularAnimeRequest(page: Int): Request = if (page == 1) {
-        GET(baseUrl, headers)
-    } else {
-        GET("$baseUrl/page/$page/", headers)
-    }
+    override fun popularAnimeRequest(page: Int): Request = GET(baseUrl, headers)
 
-    override fun popularAnimeSelector(): String = "article.short"
+    override fun popularAnimeSelector(): String = ".popular article.p-item"
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
-        val link = element.selectFirst("a.short-poster")!!
+        val link = element.selectFirst(
+            "a.short-poster, a.gallery_item, .sh-desc > a[href]",
+        )!!
 
         anime.setUrlWithoutDomain(link.absUrl("href"))
 
-        anime.title = element.selectFirst(".sh-desc a .sh-title")
-            ?.text()
-            ?.substringBeforeLast("...")
-            ?: element.selectFirst(".sh-desc a")?.attr("title")
-            ?: link.attr("title")
-
-        element.selectFirst("a.short-poster img")?.let { image ->
-            var thumbnail = image.attr("data-src")
-
-            if (thumbnail.isEmpty()) {
-                thumbnail = image.absUrl("src")
+        anime.title = link.attr("title")
+            .trim()
+            .ifEmpty {
+                element.selectFirst(".sh-title, .p-title")
+                    ?.text()
+                    ?.trim()
+                    ?.substringBeforeLast("...")
+                    .orEmpty()
             }
 
-            if (thumbnail.isEmpty()) {
-                thumbnail = image.attr("src")
-            }
+        val image = element.selectFirst(
+            "a.short-poster img, a.gallery_item img, img",
+        )
 
-            anime.thumbnail_url = thumbnail
+        if (image != null) {
+            anime.thumbnail_url = image.attr("data-src")
+                .trim()
+                .ifEmpty { image.absUrl("src") }
+                .ifEmpty { image.attr("src").trim() }
+        } else {
+            anime.thumbnail_url = link.ownText()
+                .trim()
+                .takeIf {
+                    it.startsWith("https://") || it.startsWith("http://")
+                }
         }
 
         return anime
     }
 
-    override fun popularAnimeNextPageSelector(): String = ".pnext a, .navigation a:last-of-type"
+    // У сайта нет отдельной страницы рейтинга, поэтому используем
+    // самостоятельный боковой блок .popular без пагинации.
+    override fun popularAnimeNextPageSelector(): String = ".popular .pnext a"
 
-    override fun latestUpdatesRequest(page: Int): Request = popularAnimeRequest(page)
+    override fun latestUpdatesRequest(page: Int): Request = if (page == 1) {
+        GET(baseUrl, headers)
+    } else {
+        GET("$baseUrl/page/$page/", headers)
+    }
 
-    override fun latestUpdatesSelector(): String = popularAnimeSelector()
+    override fun latestUpdatesSelector(): String = "main .floats article.short"
 
-    override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
+    override fun latestUpdatesFromElement(element: Element): SAnime =
+        popularAnimeFromElement(element)
 
-    override fun latestUpdatesNextPageSelector(): String = popularAnimeNextPageSelector()
+    override fun latestUpdatesNextPageSelector(): String =
+        "main .floats .pnext a"
 
     // ============================ Search ============================
 
@@ -78,16 +92,30 @@ class DubClubSource(
         page: Int,
         query: String,
         filters: AnimeFilterList,
-    ): Request = GET(
-        "$baseUrl/index.php?do=search&subaction=search&story=$query&search_start=$page",
-        headers,
-    )
+    ): Request {
+        val searchStart = if (page <= 1) 0 else page
 
-    override fun searchAnimeSelector(): String = popularAnimeSelector()
+        val url = baseUrl.toHttpUrl()
+            .newBuilder()
+            .addPathSegment("index.php")
+            .addQueryParameter("do", "search")
+            .addQueryParameter("subaction", "search")
+            .addQueryParameter("story", query)
+            .addQueryParameter("search_start", searchStart.toString())
+            .addQueryParameter("result_from", "1")
+            .build()
 
-    override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
+        return GET(url.toString(), headers)
+    }
 
-    override fun searchAnimeNextPageSelector(): String = popularAnimeNextPageSelector()
+    override fun searchAnimeSelector(): String =
+        "main .floats article.short"
+
+    override fun searchAnimeFromElement(element: Element): SAnime =
+        popularAnimeFromElement(element)
+
+    override fun searchAnimeNextPageSelector(): String =
+        "main .floats .pnext a"
 
     // ============================ Details ============================
 
@@ -140,7 +168,7 @@ class DubClubSource(
             .get()
             .build()
 
-        val playerHtml = network.client
+        val playerHtml = client
             .newCall(playerRequest)
             .execute()
             .use { playerResponse ->
@@ -153,35 +181,44 @@ class DubClubSource(
 
         val playerDocument = Jsoup.parse(playerHtml, iframeUrl)
 
-        val options = playerDocument.select(
-            ".serial-series-box select option[data-id][data-hash]",
+        val episodeElements = playerDocument.select(
+            ".serial-series-box [data-id][data-hash]",
         )
 
-        if (options.isEmpty()) {
+        if (episodeElements.isEmpty()) {
             return emptyList()
         }
 
-        return options
-            .mapNotNull { option ->
-                val id = option.attr("data-id").trim()
-                val hash = option.attr("data-hash").trim()
-                val numberText = option.attr("value").trim()
+        val episodeNumberRegex = Regex("""\d+(?:[.,]\d+)?""")
+
+        return episodeElements
+            .mapNotNull { episodeElement ->
+                val id = episodeElement.attr("data-id").trim()
+                val hash = episodeElement.attr("data-hash").trim()
 
                 if (id.isEmpty() || hash.isEmpty()) {
                     return@mapNotNull null
                 }
 
-                val episodeNumber = numberText
-                    .replace(',', '.')
-                    .toFloatOrNull()
-                    ?: option.text()
-                        .substringBefore(' ')
-                        .replace(',', '.')
-                        .toFloatOrNull()
+                val episodeNumber = listOf(
+                    episodeElement.attr("value"),
+                    episodeElement.attr("data-episode"),
+                    episodeElement.attr("data-title"),
+                    episodeElement.text(),
+                )
+                    .asSequence()
+                    .mapNotNull { value ->
+                        episodeNumberRegex.find(value)
+                            ?.value
+                            ?.replace(',', '.')
+                            ?.toFloatOrNull()
+                    }
+                    .firstOrNull()
                     ?: return@mapNotNull null
 
-                val originalTitle = option.attr("data-title").trim()
-                    .ifEmpty { option.text().trim() }
+                val originalTitle = episodeElement.attr("data-title")
+                    .trim()
+                    .ifEmpty { episodeElement.text().trim() }
 
                 val episodeUrl = response.request.url
                     .newBuilder()
@@ -202,7 +239,6 @@ class DubClubSource(
             }
             .distinctBy { it.episode_number }
             .sortedByDescending { it.episode_number }
-    }
 
     override fun episodeListSelector(): String = throw UnsupportedOperationException()
 
@@ -231,17 +267,37 @@ class DubClubSource(
             ?.value
             ?: return emptyList()
 
+        val episodePlayerUrl =
+            "$playerRoot/seria/$episodeId/$episodeHash/720p"
+
+        try {
+            val playerRequest = Request.Builder()
+                .url(episodePlayerUrl)
+                .header("Referer", response.request.url.toString())
+                .header("User-Agent", USER_AGENT)
+                .get()
+                .build()
+
+            client
+                .newCall(playerRequest)
+                .execute()
+                .close()
+        } catch (_: Exception) {
+            // /ftor иногда работает и без предварительного запроса.
+        }
+
         val formBody = FormBody.Builder()
             .add("type", "seria")
             .add("id", episodeId)
             .add("hash", episodeHash)
             .add("bad_user", "false")
             .add("cdn_is_working", "true")
+            .add("info", "{}")
             .build()
 
         val request = Request.Builder()
             .url("$playerRoot/ftor")
-            .header("Referer", iframeUrl)
+            .header("Referer", episodePlayerUrl)
             .header("Origin", playerRoot)
             .header("X-Requested-With", "XMLHttpRequest")
             .header("User-Agent", USER_AGENT)
@@ -249,7 +305,7 @@ class DubClubSource(
             .post(formBody)
             .build()
 
-        val json = network.client
+        val json = client
             .newCall(request)
             .execute()
             .use { apiResponse ->
