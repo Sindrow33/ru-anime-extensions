@@ -25,12 +25,11 @@ class DubClubSource(
 
     // ============================ Popular / Latest ============================
 
-    override fun popularAnimeRequest(page: Int): Request =
-        if (page == 1) {
-            GET(baseUrl, headers)
-        } else {
-            GET("$baseUrl/page/$page/", headers)
-        }
+    override fun popularAnimeRequest(page: Int): Request = if (page == 1) {
+        GET(baseUrl, headers)
+    } else {
+        GET("$baseUrl/page/$page/", headers)
+    }
 
     override fun popularAnimeSelector(): String = "article.short"
 
@@ -63,20 +62,15 @@ class DubClubSource(
         return anime
     }
 
-    override fun popularAnimeNextPageSelector(): String =
-        ".pnext a, .navigation a:last-of-type"
+    override fun popularAnimeNextPageSelector(): String = ".pnext a, .navigation a:last-of-type"
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        popularAnimeRequest(page)
+    override fun latestUpdatesRequest(page: Int): Request = popularAnimeRequest(page)
 
-    override fun latestUpdatesSelector(): String =
-        popularAnimeSelector()
+    override fun latestUpdatesSelector(): String = popularAnimeSelector()
 
-    override fun latestUpdatesFromElement(element: Element): SAnime =
-        popularAnimeFromElement(element)
+    override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun latestUpdatesNextPageSelector(): String =
-        popularAnimeNextPageSelector()
+    override fun latestUpdatesNextPageSelector(): String = popularAnimeNextPageSelector()
 
     // ============================ Search ============================
 
@@ -89,14 +83,11 @@ class DubClubSource(
         headers,
     )
 
-    override fun searchAnimeSelector(): String =
-        popularAnimeSelector()
+    override fun searchAnimeSelector(): String = popularAnimeSelector()
 
-    override fun searchAnimeFromElement(element: Element): SAnime =
-        popularAnimeFromElement(element)
+    override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun searchAnimeNextPageSelector(): String =
-        popularAnimeNextPageSelector()
+    override fun searchAnimeNextPageSelector(): String = popularAnimeNextPageSelector()
 
     // ============================ Details ============================
 
@@ -213,11 +204,9 @@ class DubClubSource(
             .sortedByDescending { it.episode_number }
     }
 
-    override fun episodeListSelector(): String =
-        throw UnsupportedOperationException()
+    override fun episodeListSelector(): String = throw UnsupportedOperationException()
 
-    override fun episodeFromElement(element: Element): SEpisode =
-        throw UnsupportedOperationException()
+    override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException()
 
     // ============================ Videos ============================
 
@@ -380,21 +369,17 @@ class DubClubSource(
         return null
     }
 
-    private fun formatEpisodeNumber(number: Float): String =
-        if (number % 1f == 0f) {
-            number.toInt().toString()
-        } else {
-            number.toString()
-        }
+    private fun formatEpisodeNumber(number: Float): String = if (number % 1f == 0f) {
+        number.toInt().toString()
+    } else {
+        number.toString()
+    }
 
-    override fun videoListSelector(): String =
-        throw UnsupportedOperationException()
+    override fun videoListSelector(): String = throw UnsupportedOperationException()
 
-    override fun videoFromElement(element: Element): Video =
-        throw UnsupportedOperationException()
+    override fun videoFromElement(element: Element): Video = throw UnsupportedOperationException()
 
-    override fun videoUrlParse(document: Document): String =
-        throw UnsupportedOperationException()
+    override fun videoUrlParse(document: Document): String = throw UnsupportedOperationException()
 
     private companion object {
         const val EPISODE_ID_PARAMETER = "dubclub_ep_id"
