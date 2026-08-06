@@ -161,9 +161,8 @@ class AnimeGOSource(
         return GET(url, headers)
     }
 
-    override fun searchAnimeSelector(): String =
-        "div.ani-grid__item, div.ani-list__item, " +
-            "a.ajax-search__item, div.search-result-item"
+    override fun searchAnimeSelector(): String = "div.ani-grid__item, div.ani-list__item, " +
+        "a.ajax-search__item, div.search-result-item"
 
     override fun searchAnimeNextPageSelector(): String = "a.button-list-loading"
 
