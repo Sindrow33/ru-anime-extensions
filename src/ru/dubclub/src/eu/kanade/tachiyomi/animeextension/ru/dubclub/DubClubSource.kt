@@ -80,11 +80,9 @@ class DubClubSource(
 
     override fun latestUpdatesSelector(): String = "main .floats article.short"
 
-    override fun latestUpdatesFromElement(element: Element): SAnime =
-        popularAnimeFromElement(element)
+    override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun latestUpdatesNextPageSelector(): String =
-        "main .floats .pnext a"
+    override fun latestUpdatesNextPageSelector(): String = "main .floats .pnext a"
 
     // ============================ Search ============================
 
@@ -108,14 +106,11 @@ class DubClubSource(
         return GET(url.toString(), headers)
     }
 
-    override fun searchAnimeSelector(): String =
-        "main .floats article.short"
+    override fun searchAnimeSelector(): String = "main .floats article.short"
 
-    override fun searchAnimeFromElement(element: Element): SAnime =
-        popularAnimeFromElement(element)
+    override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun searchAnimeNextPageSelector(): String =
-        "main .floats .pnext a"
+    override fun searchAnimeNextPageSelector(): String = "main .floats .pnext a"
 
     // ============================ Details ============================
 
@@ -239,6 +234,7 @@ class DubClubSource(
             }
             .distinctBy { it.episode_number }
             .sortedByDescending { it.episode_number }
+    }
 
     override fun episodeListSelector(): String = throw UnsupportedOperationException()
 
