@@ -13,6 +13,7 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -268,26 +269,25 @@ class DubClubSource(
             ?.value
             ?: return emptyList()
 
-        val episodePlayerUrl =
-            "$playerRoot/seria/$episodeId/$episodeHash/720p"
+        val seasonPlayerHtml = fetchPlayerHtml(
+            url = iframeUrl,
+            referer = response.request.url.toString(),
+        ) ?: return emptyList()
 
-        try {
-            val playerRequest = Request.Builder()
-                .url(episodePlayerUrl)
-                .header("Referer", iframeUrl)
-                .header("User-Agent", USER_AGENT)
-                .get()
-                .build()
+        val episodePlayerUrl = "$playerRoot/seria/$episodeId/$episodeHash/720p"
+            .toHttpUrl()
+            .newBuilder()
+            .encodedQuery(extractPlayerQuery(seasonPlayerHtml))
+            .build()
+            .toString()
 
-            client
-                .newCall(playerRequest)
-                .execute()
-                .close()
-        } catch (_: Exception) {
-            // /ftor иногда работает и без предварительного запроса.
-        }
+        val episodePlayerHtml = fetchPlayerHtml(
+            url = episodePlayerUrl,
+            referer = iframeUrl,
+        ) ?: return emptyList()
 
         val formBody = FormBody.Builder()
+            .addPlayerAuthorization(episodePlayerHtml)
             .add("type", "seria")
             .add("id", episodeId)
             .add("hash", episodeHash)
@@ -324,6 +324,60 @@ class DubClubSource(
             .build()
 
         return parseKodikVideos(json, videoHeaders)
+    }
+
+    private fun fetchPlayerHtml(
+        url: String,
+        referer: String,
+    ): String? = try {
+        val request = Request.Builder()
+            .url(url)
+            .header("Referer", referer)
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { playerResponse ->
+            if (playerResponse.isSuccessful) {
+                playerResponse.body.string()
+            } else {
+                null
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun extractPlayerQuery(playerHtml: String): String? {
+        val rawParams = Regex("""var\s+urlParams\s*=\s*'([^']+)'""")
+            .find(playerHtml)
+            ?.groupValues
+            ?.get(1)
+            ?: return null
+
+        return try {
+            val json = JSONObject(rawParams)
+            json.keys().asSequence().joinToString("&") { key ->
+                "$key=${json.get(key).toString().lowercaseIfBoolean()}"
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun FormBody.Builder.addPlayerAuthorization(playerHtml: String): FormBody.Builder = apply {
+        PLAYER_AUTH_FIELDS.forEach { (variable, field) ->
+            Regex("""var\s+$variable\s*=\s*[\"']([^\"']+)[\"']""")
+                .find(playerHtml)
+                ?.groupValues
+                ?.get(1)
+                ?.let { add(field, it) }
+        }
+    }
+
+    private fun String.lowercaseIfBoolean(): String = when (this) {
+        "true", "false" -> lowercase()
+        else -> this
     }
 
     private fun parseKodikVideos(
@@ -458,6 +512,15 @@ class DubClubSource(
     private companion object {
         const val EPISODE_ID_PARAMETER = "dubclub_ep_id"
         const val EPISODE_HASH_PARAMETER = "dubclub_ep_hash"
+
+        val PLAYER_AUTH_FIELDS = listOf(
+            "domain" to "d",
+            "d_sign" to "d_sign",
+            "pd" to "pd",
+            "pd_sign" to "pd_sign",
+            "ref" to "ref",
+            "ref_sign" to "ref_sign",
+        )
 
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
