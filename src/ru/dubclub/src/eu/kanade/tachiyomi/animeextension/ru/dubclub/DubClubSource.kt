@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import keiyoushi.utils.useAsJsoup
 import okhttp3.FormBody
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -26,9 +27,13 @@ class DubClubSource(
 
     // ============================ Popular / Latest ============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET(baseUrl, headers)
+    override fun popularAnimeRequest(page: Int): Request = if (page == 1) {
+        GET(baseUrl, headers)
+    } else {
+        GET("$baseUrl/page/$page/", headers)
+    }
 
-    override fun popularAnimeSelector(): String = ".popular article.p-item"
+    override fun popularAnimeSelector(): String = "main .floats article.short"
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
@@ -52,25 +57,25 @@ class DubClubSource(
             "a.short-poster img, a.gallery_item img, img",
         )
 
-        if (image != null) {
-            anime.thumbnail_url = image.attr("data-src")
+        val thumbnail = if (image != null) {
+            image.attr("data-src")
                 .trim()
                 .ifEmpty { image.absUrl("src") }
                 .ifEmpty { image.attr("src").trim() }
         } else {
-            anime.thumbnail_url = link.ownText()
-                .trim()
-                .takeIf {
-                    it.startsWith("https://") || it.startsWith("http://")
-                }
+            link.ownText().trim()
         }
+
+        anime.thumbnail_url = thumbnail
+            .takeIf { it.isNotEmpty() }
+            ?.let(::absoluteMediaUrl)
 
         return anime
     }
 
     // У сайта нет отдельной страницы рейтинга, поэтому используем
     // самостоятельный боковой блок .popular без пагинации.
-    override fun popularAnimeNextPageSelector(): String = ".popular .pnext a"
+    override fun popularAnimeNextPageSelector(): String = "#bottom-nav .pnext a, main .pnext a"
 
     override fun latestUpdatesRequest(page: Int): Request = if (page == 1) {
         GET(baseUrl, headers)
@@ -82,7 +87,7 @@ class DubClubSource(
 
     override fun latestUpdatesFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun latestUpdatesNextPageSelector(): String = "main .floats .pnext a"
+    override fun latestUpdatesNextPageSelector(): String = "#bottom-nav .pnext a, main .pnext a"
 
     // ============================ Search ============================
 
@@ -110,7 +115,7 @@ class DubClubSource(
 
     override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
-    override fun searchAnimeNextPageSelector(): String = "main .floats .pnext a"
+    override fun searchAnimeNextPageSelector(): String = "#bottom-nav .pnext a, main .pnext a"
 
     // ============================ Details ============================
 
@@ -269,7 +274,7 @@ class DubClubSource(
         try {
             val playerRequest = Request.Builder()
                 .url(episodePlayerUrl)
-                .header("Referer", response.request.url.toString())
+                .header("Referer", iframeUrl)
                 .header("User-Agent", USER_AGENT)
                 .get()
                 .build()
@@ -312,10 +317,19 @@ class DubClubSource(
                 apiResponse.body.string()
             }
 
-        return parseKodikVideos(json)
+        val videoHeaders = Headers.Builder()
+            .add("Referer", episodePlayerUrl)
+            .add("Origin", playerRoot)
+            .add("User-Agent", USER_AGENT)
+            .build()
+
+        return parseKodikVideos(json, videoHeaders)
     }
 
-    private fun parseKodikVideos(json: String): List<Video> {
+    private fun parseKodikVideos(
+        json: String,
+        videoHeaders: Headers,
+    ): List<Video> {
         val result = mutableListOf<Video>()
 
         val linkRegex = Regex(
@@ -335,6 +349,7 @@ class DubClubSource(
                 videoUrl,
                 "Kodik ${quality}p",
                 videoUrl,
+                headers = videoHeaders,
             )
         }
 
@@ -419,6 +434,13 @@ class DubClubSource(
         }
 
         return null
+    }
+
+    private fun absoluteMediaUrl(url: String): String = when {
+        url.startsWith("//") -> "https:$url"
+        url.startsWith("https://") || url.startsWith("http://") -> url
+        url.startsWith("/") -> "$baseUrl$url"
+        else -> "$baseUrl/${url.trimStart('/')}"
     }
 
     private fun formatEpisodeNumber(number: Float): String = if (number % 1f == 0f) {
