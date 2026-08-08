@@ -445,21 +445,23 @@ class DubClubSource(
 
         return runCatching {
             val json = JSONObject(rawParams)
-            val urlBuilder = "https://localhost/"
-                .toHttpUrl()
-                .newBuilder()
+            val queryParameters = mutableListOf<String>()
+            val keys = json.keys()
 
-            json.keys().forEach { key ->
+            while (keys.hasNext()) {
+                val key = keys.next()
                 val value = json.opt(key)
+
                 if (value != null && value != JSONObject.NULL) {
-                    urlBuilder.addQueryParameter(
-                        key,
-                        value.toString().lowercaseIfBoolean(),
-                    )
+                    // Kodik already percent-encodes values such as `ref`.
+                    // Encoding them again changes `%3A` to `%253A` and
+                    // invalidates the matching signature.
+                    queryParameters +=
+                        "$key=${value.toString().lowercaseIfBoolean()}"
                 }
             }
 
-            urlBuilder.build().encodedQuery
+            queryParameters.joinToString("&")
         }.getOrNull()
     }
 
