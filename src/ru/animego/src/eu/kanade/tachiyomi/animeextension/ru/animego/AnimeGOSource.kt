@@ -1,6 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.ru.animego
 
+import android.app.Application
+import androidx.preference.ListPreference
+import androidx.preference.PreferenceScreen
 import aniyomi.lib.sibnetextractor.SibnetExtractor
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -15,6 +19,8 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -22,12 +28,23 @@ import java.net.URLEncoder
 class AnimeGOSource(
     override val name: String,
     override val baseUrl: String,
-) : ParsedAnimeHttpSource() {
+) : ParsedAnimeHttpSource(),
+    ConfigurableAnimeSource {
 
     override val lang = "ru"
     override val supportsLatest = true
 
     override val client = network.cloudflareClient
+
+    private val preferences by lazy {
+        Injekt.get<Application>()
+            .getSharedPreferences("source_$id", 0x0000)
+    }
+
+    private companion object {
+        const val PREFERRED_QUALITY_KEY = "preferred_quality"
+        const val QUALITY_MAX = "max"
+    }
 
     private val kodikExtractor by lazy { KodikExtractor(client, baseUrl) }
     private val aniboomExtractor by lazy { AniboomExtractor(client, baseUrl) }
@@ -493,7 +510,9 @@ class AnimeGOSource(
         return GET(requestUrl, ajaxHeaders(referer))
     }
 
-    override fun videoListParse(response: Response): List<Video> {
+    override fun videoListParse(response: Response): List<Video> = sortVideosByPreferredQuality(videoListParseUnsorted(response))
+
+    private fun videoListParseUnsorted(response: Response): List<Video> {
         val content = jsonContent(response.body.string())
         if (content.isBlank()) return emptyList()
 
@@ -619,6 +638,68 @@ class AnimeGOSource(
     }.getOrDefault("")
 
     private fun Float.cleanNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
+
+    // ============================== Settings ==============================
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val qualityPreference = ListPreference(screen.context).apply {
+            key = PREFERRED_QUALITY_KEY
+            title = "Предпочтительное качество"
+            entries = arrayOf(
+                "Максимальное доступное",
+                "1080p",
+                "720p",
+                "480p",
+                "360p",
+            )
+            entryValues = arrayOf(
+                QUALITY_MAX,
+                "1080",
+                "720",
+                "480",
+                "360",
+            )
+            setDefaultValue(QUALITY_MAX)
+            summary = "%s"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit()
+                    .putString(PREFERRED_QUALITY_KEY, newValue as String)
+                    .apply()
+                true
+            }
+        }
+
+        screen.addPreference(qualityPreference)
+    }
+
+    private fun sortVideosByPreferredQuality(
+        videos: List<Video>,
+    ): List<Video> {
+        val preferredQuality = preferences.getString(
+            PREFERRED_QUALITY_KEY,
+            QUALITY_MAX,
+        ) ?: QUALITY_MAX
+
+        return if (preferredQuality == QUALITY_MAX) {
+            videos.sortedByDescending(::videoQuality)
+        } else {
+            val preferredNumber = preferredQuality.toIntOrNull()
+
+            videos.sortedWith(
+                compareByDescending<Video> {
+                    videoQuality(it) == preferredNumber
+                }.thenByDescending(::videoQuality),
+            )
+        }
+    }
+
+    private fun videoQuality(video: Video): Int = Regex("""(\d{3,4})p""", RegexOption.IGNORE_CASE)
+        .find(video.quality)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+        ?: 0
 
     private data class PlayerButton(
         val url: String,
