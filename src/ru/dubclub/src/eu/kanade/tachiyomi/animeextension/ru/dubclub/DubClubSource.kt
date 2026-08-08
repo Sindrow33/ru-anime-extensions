@@ -28,13 +28,9 @@ class DubClubSource(
 
     // ============================ Popular / Latest ============================
 
-    override fun popularAnimeRequest(page: Int): Request = if (page == 1) {
-        GET(baseUrl, headers)
-    } else {
-        GET("$baseUrl/page/$page/", headers)
-    }
+    override fun popularAnimeRequest(page: Int): Request = GET(baseUrl, headers)
 
-    override fun popularAnimeSelector(): String = "main .floats article.short"
+    override fun popularAnimeSelector(): String = ".popular article.p-item"
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
@@ -74,9 +70,8 @@ class DubClubSource(
         return anime
     }
 
-    // У сайта нет отдельной страницы рейтинга, поэтому используем
-    // самостоятельный боковой блок .popular без пагинации.
-    override fun popularAnimeNextPageSelector(): String = "#bottom-nav .pnext a, main .pnext a"
+    // Боковой блок популярных не имеет отдельной пагинации.
+    override fun popularAnimeNextPageSelector(): String = "#dubclub-popular-next-page"
 
     override fun latestUpdatesRequest(page: Int): Request = if (page == 1) {
         GET(baseUrl, headers)
@@ -296,26 +291,38 @@ class DubClubSource(
             .add("info", "{}")
             .build()
 
-        val request = Request.Builder()
-            .url("$playerRoot/ftor")
-            .header("Referer", episodePlayerUrl)
-            .header("Origin", playerRoot)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "application/json, text/javascript, */*; q=0.01")
-            .post(formBody)
-            .build()
+        val apiEndpoints = mutableListOf<String>()
 
-        val json = client
-            .newCall(request)
-            .execute()
-            .use { apiResponse ->
-                if (!apiResponse.isSuccessful) {
-                    return emptyList()
-                }
+        extractKodikApiEndpoint(
+            playerHtml = episodePlayerHtml,
+            playerUrl = episodePlayerUrl,
+            playerRoot = playerRoot,
+        )?.let(apiEndpoints::add)
 
-                apiResponse.body.string()
+        apiEndpoints += "$playerRoot/ftor"
+
+        var json: String? = null
+
+        apiEndpoints.distinct().forEach { endpoint ->
+            if (json != null) return@forEach
+
+            val candidate = postKodikApi(
+                endpoint = endpoint,
+                referer = episodePlayerUrl,
+                origin = playerRoot,
+                formBody = formBody,
+            )
+
+            val containsLinks = candidate != null && runCatching {
+                JSONObject(candidate).optJSONObject("links") != null
+            }.getOrDefault(false)
+
+            if (containsLinks) {
+                json = candidate
             }
+        }
+
+        val apiJson = json ?: return emptyList()
 
         val videoHeaders = Headers.Builder()
             .add("Referer", episodePlayerUrl)
@@ -323,7 +330,7 @@ class DubClubSource(
             .add("User-Agent", USER_AGENT)
             .build()
 
-        return parseKodikVideos(json, videoHeaders)
+        return parseKodikVideos(apiJson, videoHeaders)
     }
 
     private fun fetchPlayerHtml(
@@ -348,6 +355,87 @@ class DubClubSource(
         null
     }
 
+    private fun extractKodikApiEndpoint(
+        playerHtml: String,
+        playerUrl: String,
+        playerRoot: String,
+    ): String? {
+        PLAYER_JS_REGEX.findAll(playerHtml).forEach { match ->
+            val scriptPath = match.groupValues[1].trim()
+            if (scriptPath.isEmpty()) return@forEach
+
+            val scriptUrl = when {
+                scriptPath.startsWith("//") -> "https:$scriptPath"
+                scriptPath.startsWith("https://") || scriptPath.startsWith("http://") -> scriptPath
+                else -> playerUrl.toHttpUrl()
+                    .resolve(scriptPath)
+                    ?.toString()
+                    ?: return@forEach
+            }
+
+            val scriptBody = fetchPlayerHtml(
+                url = scriptUrl,
+                referer = playerUrl,
+            ) ?: return@forEach
+
+            val encodedPath = API_PATH_REGEX
+                .find(scriptBody)
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: return@forEach
+
+            val paddedPath = encodedPath.padEnd(
+                encodedPath.length + (4 - encodedPath.length % 4) % 4,
+                '=',
+            )
+
+            val decodedPath = runCatching {
+                String(
+                    Base64.decode(paddedPath, Base64.DEFAULT),
+                    Charsets.UTF_8,
+                ).trim()
+            }.getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?: return@forEach
+
+            return when {
+                decodedPath.startsWith("https://") ||
+                    decodedPath.startsWith("http://") -> decodedPath
+                decodedPath.startsWith("/") -> "$playerRoot$decodedPath"
+                else -> "$playerRoot/${decodedPath.trimStart('/')}"
+            }
+        }
+
+        return null
+    }
+
+    private fun postKodikApi(
+        endpoint: String,
+        referer: String,
+        origin: String,
+        formBody: FormBody,
+    ): String? = runCatching {
+        val request = Request.Builder()
+            .url(endpoint)
+            .header("Referer", referer)
+            .header("Origin", origin)
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json, text/javascript, */*; q=0.01")
+            .post(formBody)
+            .build()
+
+        client.newCall(request).execute().use { apiResponse ->
+            if (apiResponse.isSuccessful) {
+                apiResponse.body.string()
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+
     private fun extractPlayerQuery(playerHtml: String): String? {
         val rawParams = Regex("""var\s+urlParams\s*=\s*'([^']+)'""")
             .find(playerHtml)
@@ -355,14 +443,24 @@ class DubClubSource(
             ?.get(1)
             ?: return null
 
-        return try {
+        return runCatching {
             val json = JSONObject(rawParams)
-            json.keys().asSequence().joinToString("&") { key ->
-                "$key=${json.get(key).toString().lowercaseIfBoolean()}"
+            val urlBuilder = "https://localhost/"
+                .toHttpUrl()
+                .newBuilder()
+
+            json.keys().forEach { key ->
+                val value = json.opt(key)
+                if (value != null && value != JSONObject.NULL) {
+                    urlBuilder.addQueryParameter(
+                        key,
+                        value.toString().lowercaseIfBoolean(),
+                    )
+                }
             }
-        } catch (_: Exception) {
-            null
-        }
+
+            urlBuilder.build().encodedQuery
+        }.getOrNull()
     }
 
     private fun FormBody.Builder.addPlayerAuthorization(playerHtml: String): FormBody.Builder = apply {
@@ -384,30 +482,56 @@ class DubClubSource(
         json: String,
         videoHeaders: Headers,
     ): List<Video> {
-        val result = mutableListOf<Video>()
+        val links = runCatching {
+            JSONObject(json).optJSONObject("links")
+        }.getOrNull() ?: return emptyList()
 
-        val linkRegex = Regex(
-            """"(\d{3,4})"\s*:\s*\[\s*\{[^}]*?"src"\s*:\s*"([^"]+)"""",
-        )
+        val qualities = mutableListOf<String>()
+        val keys = links.keys()
 
-        linkRegex.findAll(json).forEach { match ->
-            val quality = match.groupValues[1]
-            val encryptedSource = match.groupValues[2]
-                .replace("\\/", "/")
-                .replace("\\u0026", "&")
+        while (keys.hasNext()) {
+            qualities += keys.next()
+        }
 
-            val videoUrl = decodeKodikSource(encryptedSource)
-                ?: return@forEach
+        return qualities.mapNotNull { quality ->
+            val sources = links.optJSONArray(quality)
+                ?: return@mapNotNull null
 
-            result += Video(
-                videoUrl,
-                "Kodik ${quality}p",
-                videoUrl,
+            var videoUrl: String? = null
+
+            for (index in 0 until sources.length()) {
+                val encodedSource = sources
+                    .optJSONObject(index)
+                    ?.optString("src")
+                    ?.trim()
+                    ?.replace("\\/", "/")
+                    ?.replace("\\u0026", "&")
+                    .orEmpty()
+
+                if (encodedSource.isEmpty()) continue
+
+                val decodedSource = decodeKodikSource(encodedSource)
+                    ?: continue
+
+                if (
+                    decodedSource.startsWith("https://") ||
+                    decodedSource.startsWith("http://")
+                ) {
+                    videoUrl = decodedSource
+                    break
+                }
+            }
+
+            val resolvedVideoUrl = videoUrl ?: return@mapNotNull null
+            val qualityLabel = if (quality.endsWith("p")) quality else "${quality}p"
+
+            Video(
+                resolvedVideoUrl,
+                "Kodik $qualityLabel",
+                resolvedVideoUrl,
                 headers = videoHeaders,
             )
         }
-
-        return result
             .distinctBy { it.videoUrl }
             .sortedByDescending {
                 Regex("""(\d{3,4})p""")
@@ -420,19 +544,24 @@ class DubClubSource(
     }
 
     /**
-     * Новые ответы Kodik /ftor используют ROT18, после чего Base64.
+     * Kodik может вернуть прямую ссылку или ROT18 + Base64.
      */
     private fun decodeKodikSource(source: String): String? {
-        if (source.startsWith("https://") || source.startsWith("http://")) {
-            return source
+        val normalizedSource = source.trim()
+
+        if (
+            normalizedSource.startsWith("https://") ||
+            normalizedSource.startsWith("http://")
+        ) {
+            return normalizedSource
         }
 
-        if (source.startsWith("//")) {
-            return "https:$source"
+        if (normalizedSource.startsWith("//")) {
+            return "https:$normalizedSource"
         }
 
-        return try {
-            val rotated = source.map { character ->
+        return runCatching {
+            val rotated = normalizedSource.map { character ->
                 when (character) {
                     in 'A'..'Z' -> {
                         ('A'.code + (character.code - 'A'.code + 18) % 26).toChar()
@@ -446,8 +575,13 @@ class DubClubSource(
                 }
             }.joinToString("")
 
+            val padded = rotated.padEnd(
+                rotated.length + (4 - rotated.length % 4) % 4,
+                '=',
+            )
+
             val decoded = String(
-                Base64.decode(rotated, Base64.DEFAULT),
+                Base64.decode(padded, Base64.DEFAULT),
                 Charsets.UTF_8,
             ).trim()
 
@@ -455,12 +589,9 @@ class DubClubSource(
                 decoded.startsWith("//") -> "https:$decoded"
                 decoded.startsWith("https://") -> decoded
                 decoded.startsWith("http://") -> decoded
-                decoded.isNotEmpty() -> "https://$decoded"
                 else -> null
             }
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 
     private fun findKodikIframe(document: Document): String? {
@@ -510,6 +641,11 @@ class DubClubSource(
     override fun videoUrlParse(document: Document): String = throw UnsupportedOperationException()
 
     private companion object {
+        val PLAYER_JS_REGEX =
+            Regex("""<script[^>]+src=["']([^"']*assets/js[^"']+)["']""")
+        val API_PATH_REGEX =
+            Regex("""\$\.ajax[^)]+atob\(["']([^"']+)["']\)""")
+
         const val EPISODE_ID_PARAMETER = "dubclub_ep_id"
         const val EPISODE_HASH_PARAMETER = "dubclub_ep_hash"
 
