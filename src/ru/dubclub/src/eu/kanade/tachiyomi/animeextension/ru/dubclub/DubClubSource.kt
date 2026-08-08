@@ -291,7 +291,13 @@ class DubClubSource(
             .add("info", "{}")
             .build()
 
-        val apiEndpoints = mutableListOf<String>()
+        val videoHeaders = Headers.Builder()
+            .add("Referer", episodePlayerUrl)
+            .add("Origin", playerRoot)
+            .add("User-Agent", USER_AGENT)
+            .build()
+
+        val apiEndpoints = mutableListOf("$playerRoot/ftor")
 
         extractKodikApiEndpoint(
             playerHtml = episodePlayerHtml,
@@ -299,38 +305,22 @@ class DubClubSource(
             playerRoot = playerRoot,
         )?.let(apiEndpoints::add)
 
-        apiEndpoints += "$playerRoot/ftor"
-
-        var json: String? = null
-
-        apiEndpoints.distinct().forEach { endpoint ->
-            if (json != null) return@forEach
-
-            val candidate = postKodikApi(
+        for (endpoint in apiEndpoints.distinct()) {
+            val apiJson = postKodikApi(
                 endpoint = endpoint,
                 referer = episodePlayerUrl,
                 origin = playerRoot,
                 formBody = formBody,
-            )
+            ) ?: continue
 
-            val containsLinks = candidate != null && runCatching {
-                JSONObject(candidate).optJSONObject("links") != null
-            }.getOrDefault(false)
+            val videos = parseKodikVideos(apiJson, videoHeaders)
 
-            if (containsLinks) {
-                json = candidate
+            if (videos.isNotEmpty()) {
+                return videos
             }
         }
 
-        val apiJson = json ?: return emptyList()
-
-        val videoHeaders = Headers.Builder()
-            .add("Referer", episodePlayerUrl)
-            .add("Origin", playerRoot)
-            .add("User-Agent", USER_AGENT)
-            .build()
-
-        return parseKodikVideos(apiJson, videoHeaders)
+        return emptyList()
     }
 
     private fun fetchPlayerHtml(
